@@ -1,0 +1,303 @@
+EESchema Schematic File Version 4
+EELAYER 26 0
+EELAYER END
+$Descr A4 11693 8268
+encoding utf-8
+Sheet 1 1
+Title ""
+Date ""
+Rev ""
+Comp ""
+Comment1 ""
+Comment2 ""
+Comment3 ""
+Comment4 ""
+$EndDescr
+$Comp
+L RF_Module:ESP32-WROOM-32 U?
+U 1 1 65440161
+P 5050 3700
+F 0 "U?" H 5050 5278 50  0000 C CNN
+F 1 "ESP32-WROOM-32" H 5050 5187 50  0000 C CNN
+F 2 "RF_Module:ESP32-WROOM-32" H 5050 2200 50  0001 C CNN
+F 3 "https://www.espressif.com/sites/default/files/documentation/esp32-wroom-32_datasheet_en.pdf" H 4750 3750 50  0001 C CNN
+	1    5050 3700
+	1    0    0    -1  
+$EndComp
+$Comp
+L Device:Battery BT?
+U 1 1 65440272
+P 5750 1150
+F 0 "BT?" H 5858 1196 50  0000 L CNN
+F 1 "Battery" H 5858 1105 50  0000 L CNN
+F 2 "" V 5750 1210 50  0001 C CNN
+F 3 "~" V 5750 1210 50  0001 C CNN
+	1    5750 1150
+	0    1    1    0   
+$EndComp
+$Comp
+L Regulator_Linear:AP2112K-3.3 U?
+U 1 1 65440591
+P 7600 1300
+F 0 "U?" H 7600 1642 50  0000 C CNN
+F 1 "AP2112K-3.3" H 7600 1551 50  0000 C CNN
+F 2 "Package_TO_SOT_SMD:SOT-23-5" H 7600 1625 50  0001 C CNN
+F 3 "https://www.diodes.com/assets/Datasheets/AP2112.pdf" H 7600 1400 50  0001 C CNN
+	1    7600 1300
+	1    0    0    -1  
+$EndComp
+$Comp
+L Transistor_BJT:PN2222A Q?
+U 1 1 654407CF
+P 7000 3900
+F 0 "Q?" H 7191 3946 50  0000 L CNN
+F 1 "PN2222A" H 7191 3855 50  0000 L CNN
+F 2 "Package_TO_SOT_THT:TO-92_Inline" H 7200 3825 50  0001 L CIN
+F 3 "http://www.fairchildsemi.com/ds/PN/PN2222A.pdf" H 7000 3900 50  0001 L CNN
+	1    7000 3900
+	0    1    1    0   
+$EndComp
+$Comp
+L Device:R R?
+U 1 1 65440993
+P 7000 3350
+F 0 "R?" H 7070 3396 50  0000 L CNN
+F 1 "R" H 7070 3305 50  0000 L CNN
+F 2 "" V 6930 3350 50  0001 C CNN
+F 3 "~" H 7000 3350 50  0001 C CNN
+	1    7000 3350
+	1    0    0    -1  
+$EndComp
+$Comp
+L Diode:1N4001 D?
+U 1 1 65440A93
+P 7650 4000
+F 0 "D?" H 7650 4216 50  0000 C CNN
+F 1 "1N4001" H 7650 4125 50  0000 C CNN
+F 2 "Diode_THT:D_DO-41_SOD81_P10.16mm_Horizontal" H 7650 3825 50  0001 C CNN
+F 3 "http://www.vishay.com/docs/88503/1n4001.pdf" H 7650 4000 50  0001 C CNN
+	1    7650 4000
+	-1   0    0    1   
+$EndComp
+$Comp
+L Motor:Motor_DC M?
+U 1 1 65440B99
+P 8050 4200
+F 0 "M?" H 8208 4196 50  0000 L CNN
+F 1 "Motor_DC" H 8208 4105 50  0000 L CNN
+F 2 "" H 8050 4110 50  0001 C CNN
+F 3 "~" H 8050 4110 50  0001 C CNN
+	1    8050 4200
+	1    0    0    -1  
+$EndComp
+$Comp
+L Sensor_Pressure:MPXA6115A U?
+U 1 1 65440D4B
+P 3650 4450
+F 0 "U?" H 3220 4496 50  0000 R CNN
+F 1 "MPXA6115A" H 3220 4405 50  0000 R CNN
+F 2 "" H 3150 4100 50  0001 C CNN
+F 3 "http://www.nxp.com/files/sensors/doc/data_sheet/MPXA6115A.pdf" H 3650 5050 50  0001 C CNN
+	1    3650 4450
+	1    0    0    -1  
+$EndComp
+Wire Wire Line
+	7300 1300 7250 1300
+Wire Wire Line
+	7250 1300 7250 1400
+$Comp
+L power:GND #PWR?
+U 1 1 654412BB
+P 7600 1750
+F 0 "#PWR?" H 7600 1500 50  0001 C CNN
+F 1 "GND" H 7605 1577 50  0000 C CNN
+F 2 "" H 7600 1750 50  0001 C CNN
+F 3 "" H 7600 1750 50  0001 C CNN
+	1    7600 1750
+	1    0    0    -1  
+$EndComp
+$Comp
+L pspice:CAP C?
+U 1 1 6544158D
+P 8450 1450
+F 0 "C?" H 8628 1496 50  0000 L CNN
+F 1 "1uF" H 8628 1405 50  0000 L CNN
+F 2 "" H 8450 1450 50  0001 C CNN
+F 3 "~" H 8450 1450 50  0001 C CNN
+	1    8450 1450
+	1    0    0    -1  
+$EndComp
+Wire Wire Line
+	7900 1200 8450 1200
+$Comp
+L power:GND #PWR?
+U 1 1 65441626
+P 8450 1950
+F 0 "#PWR?" H 8450 1700 50  0001 C CNN
+F 1 "GND" H 8455 1777 50  0000 C CNN
+F 2 "" H 8450 1950 50  0001 C CNN
+F 3 "" H 8450 1950 50  0001 C CNN
+	1    8450 1950
+	1    0    0    -1  
+$EndComp
+Wire Wire Line
+	8450 1950 8450 1700
+Wire Wire Line
+	7600 1600 7600 1750
+$Comp
+L power:+3.3V #PWR?
+U 1 1 65442B2A
+P 5050 1900
+F 0 "#PWR?" H 5050 1750 50  0001 C CNN
+F 1 "+3.3V" H 5065 2073 50  0000 C CNN
+F 2 "" H 5050 1900 50  0001 C CNN
+F 3 "" H 5050 1900 50  0001 C CNN
+	1    5050 1900
+	1    0    0    -1  
+$EndComp
+$Comp
+L power:GND #PWR?
+U 1 1 65442F55
+P 5050 5250
+F 0 "#PWR?" H 5050 5000 50  0001 C CNN
+F 1 "GND" H 5055 5077 50  0000 C CNN
+F 2 "" H 5050 5250 50  0001 C CNN
+F 3 "" H 5050 5250 50  0001 C CNN
+	1    5050 5250
+	1    0    0    -1  
+$EndComp
+$Comp
+L pspice:CAP C?
+U 1 1 65443559
+P 6650 1500
+F 0 "C?" H 6828 1546 50  0000 L CNN
+F 1 "1uF" H 6828 1455 50  0000 L CNN
+F 2 "" H 6650 1500 50  0001 C CNN
+F 3 "~" H 6650 1500 50  0001 C CNN
+	1    6650 1500
+	1    0    0    -1  
+$EndComp
+$Comp
+L power:GND #PWR?
+U 1 1 65443560
+P 6650 2000
+F 0 "#PWR?" H 6650 1750 50  0001 C CNN
+F 1 "GND" H 6655 1827 50  0000 C CNN
+F 2 "" H 6650 2000 50  0001 C CNN
+F 3 "" H 6650 2000 50  0001 C CNN
+	1    6650 2000
+	1    0    0    -1  
+$EndComp
+Wire Wire Line
+	6650 2000 6650 1850
+Wire Wire Line
+	7300 1200 7100 1200
+Wire Wire Line
+	6650 1200 6650 1250
+$Comp
+L Device:R R?
+U 1 1 654436F0
+P 7250 1550
+F 0 "R?" H 7320 1596 50  0000 L CNN
+F 1 "R" H 7320 1505 50  0000 L CNN
+F 2 "" V 7180 1550 50  0001 C CNN
+F 3 "~" H 7250 1550 50  0001 C CNN
+	1    7250 1550
+	1    0    0    -1  
+$EndComp
+Wire Wire Line
+	7250 1700 7100 1700
+Wire Wire Line
+	7100 1700 7100 1200
+Connection ~ 7100 1200
+Wire Wire Line
+	7100 1200 6650 1200
+Wire Wire Line
+	5650 3000 7000 3000
+Wire Wire Line
+	7000 3000 7000 3200
+Wire Wire Line
+	7000 3500 7000 3700
+$Comp
+L power:GND #PWR?
+U 1 1 654449F9
+P 6650 4250
+F 0 "#PWR?" H 6650 4000 50  0001 C CNN
+F 1 "GND" H 6655 4077 50  0000 C CNN
+F 2 "" H 6650 4250 50  0001 C CNN
+F 3 "" H 6650 4250 50  0001 C CNN
+	1    6650 4250
+	1    0    0    -1  
+$EndComp
+Wire Wire Line
+	6650 4250 6650 4000
+Wire Wire Line
+	6800 4000 6650 4000
+Wire Wire Line
+	7200 4000 7500 4000
+Wire Wire Line
+	7800 4000 7950 4000
+$Comp
+L power:GND #PWR?
+U 1 1 6544603A
+P 8050 4800
+F 0 "#PWR?" H 8050 4550 50  0001 C CNN
+F 1 "GND" H 8055 4627 50  0000 C CNN
+F 2 "" H 8050 4800 50  0001 C CNN
+F 3 "" H 8050 4800 50  0001 C CNN
+	1    8050 4800
+	1    0    0    -1  
+$EndComp
+Wire Wire Line
+	8050 4500 8050 4800
+$Comp
+L power:+5V #PWR?
+U 1 1 654462EE
+P 7950 3250
+F 0 "#PWR?" H 7950 3100 50  0001 C CNN
+F 1 "+5V" H 7965 3423 50  0000 C CNN
+F 2 "" H 7950 3250 50  0001 C CNN
+F 3 "" H 7950 3250 50  0001 C CNN
+	1    7950 3250
+	1    0    0    -1  
+$EndComp
+Wire Wire Line
+	7950 3250 7950 4000
+Connection ~ 7950 4000
+Wire Wire Line
+	7950 4000 8050 4000
+Wire Wire Line
+	5950 1150 6650 1150
+Wire Wire Line
+	6650 1150 6650 1200
+Connection ~ 6650 1200
+Wire Wire Line
+	5550 1150 5550 1600
+Wire Wire Line
+	5550 1600 6400 1600
+Wire Wire Line
+	6400 1600 6400 1850
+Wire Wire Line
+	6400 1850 6650 1850
+Connection ~ 6650 1850
+Wire Wire Line
+	6650 1850 6650 1750
+$Comp
+L power:+3.3V #PWR?
+U 1 1 654479C0
+P 8900 1200
+F 0 "#PWR?" H 8900 1050 50  0001 C CNN
+F 1 "+3.3V" V 8915 1328 50  0000 L CNN
+F 2 "" H 8900 1200 50  0001 C CNN
+F 3 "" H 8900 1200 50  0001 C CNN
+	1    8900 1200
+	0    1    1    0   
+$EndComp
+Wire Wire Line
+	8450 1200 8900 1200
+Connection ~ 8450 1200
+Wire Wire Line
+	5050 2300 5050 1900
+Wire Wire Line
+	5050 5250 5050 5100
+$EndSCHEMATC
