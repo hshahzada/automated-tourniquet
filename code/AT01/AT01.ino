@@ -2,36 +2,39 @@
 Adafruit Arduino - Lesson 13. DC Motor
 */
 
+#include "HX710B.h"
+
+HX710B pressure_sensor;
 
 int motorPin = 5;
 
-int detectPressure(){
-    // wait for the current reading to finish
-  while (digitalRead(2)) {}
+// int detectPressure(){
+//     // wait for the current reading to finish
+//   while (digitalRead(2)) {}
 
-  // read 24 bits
-  long result = 0;
-  for (int i = 0; i < 24; i++) {
-    digitalWrite(3, HIGH);
-    digitalWrite(3, LOW);
-    result = result << 1;
-    if (digitalRead(2)) {
-      result++;
-    }
-  }
+//   // read 24 bits
+//   long result = 0;
+//   for (int i = 0; i < 24; i++) {
+//     digitalWrite(3, HIGH);
+//     digitalWrite(3, LOW);
+//     result = result << 1;
+//     if (digitalRead(2)) {
+//       result++;
+//     }
+//   }
 
-  // get the 2s compliment
-  result = result ^ 0x800000;
+//   // get the 2s compliment
+//   result = result ^ 0x800000;
 
-  // pulse the clock line 3 times to start the next pressure reading
-  for (char i = 0; i < 3; i++) {
-    digitalWrite(3, HIGH);
-    digitalWrite(3, LOW);
-  }
-    // display pressure
-  Serial.println(result);
-  return result;
-}
+//   // pulse the clock line 3 times to start the next pressure reading
+//   for (char i = 0; i < 3; i++) {
+//     digitalWrite(3, HIGH);
+//     digitalWrite(3, LOW);
+//   }
+//     // display pressure
+//   Serial.println(result);
+//   return result;
+// }
 
 
 void setup() 
@@ -55,7 +58,8 @@ void loop()
       int pressure = 5;
       while(pressure != 4){
         analogWrite(motorPin, speed);
-        pressure = detectPressure();
+        pressure = pressure_sensor.mmHg();
+        Serial.println(pressure);
       }
     }
   }
