@@ -55,7 +55,11 @@
           "width": 0.0
         }
       ],
-      "drc_exclusions": [],
+      "drc_exclusions": [
+        "starved_thermal|155630055|93800057|c6f71f44-660c-4979-80d4-100b0ad2d8d2|15815cca-93ec-40d1-9cb6-8b0dc8bc44a2|F.Cu",
+        "starved_thermal|181955000|103750000|c6f71f44-660c-4979-80d4-100b0ad2d8d2|1d89fa35-4755-41d7-be89-64e89167cbcc|F.Cu",
+        "starved_thermal|181955000|103750000|c6f71f44-660c-4979-80d4-100b0ad2d8d2|bd2f6da8-e6db-4b89-983e-ead54327fa01|F.Cu"
+      ],
       "meta": {
         "version": 2
       },
@@ -111,9 +115,9 @@
       },
       "rules": {
         "max_error": 0.005,
-        "min_clearance": 0.0,
+        "min_clearance": 0.127,
         "min_connection": 0.0,
-        "min_copper_edge_clearance": 0.5,
+        "min_copper_edge_clearance": 0.19999999999999998,
         "min_hole_clearance": 0.25,
         "min_hole_to_hole": 0.25,
         "min_microvia_diameter": 0.19999999999999998,
@@ -123,9 +127,9 @@
         "min_text_height": 0.7999999999999999,
         "min_text_thickness": 0.08,
         "min_through_hole_diameter": 0.3,
-        "min_track_width": 0.0,
-        "min_via_annular_width": 0.09999999999999999,
-        "min_via_diameter": 0.5,
+        "min_track_width": 0.127,
+        "min_via_annular_width": 0.13,
+        "min_via_diameter": 0.39999999999999997,
         "solder_mask_clearance": 0.0,
         "solder_mask_min_width": 0.0,
         "solder_mask_to_copper_clearance": 0.0,
@@ -191,14 +195,7 @@
     "equivalence_files": []
   },
   "erc": {
-    "erc_exclusions": [
-      "lib_symbol_issues|787400|508000|cc931751-d6a1-45e7-9be8-9ce6b752abfb|00000000-0000-0000-0000-000000000000|||",
-      "power_pin_not_driven|1473200|660400|82548bd8-27dc-45bd-9a7d-9c471c285414|00000000-0000-0000-0000-000000000000|||",
-      "power_pin_not_driven|1473200|673100|82548bd8-27dc-45bd-9a7d-9c471c285414|00000000-0000-0000-0000-000000000000|||",
-      "power_pin_not_driven|1485900|431800|406e0f7e-d41e-4d12-8494-225a74c25752|00000000-0000-0000-0000-000000000000|||",
-      "power_pin_not_driven|2413000|368300|6bb88aac-82e2-4a99-bdd5-ec9e6918dae6|00000000-0000-0000-0000-000000000000|||",
-      "power_pin_not_driven|2438400|368300|029c4bca-6e1f-481c-bfd6-a9c6a201c766|00000000-0000-0000-0000-000000000000|||"
-    ],
+    "erc_exclusions": [],
     "meta": {
       "version": 0
     },
