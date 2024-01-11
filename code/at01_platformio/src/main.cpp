@@ -3,6 +3,7 @@ Adafruit Arduino - Lesson 13. DC Motor
 */
 
 #include "HX710B.h"
+#include <Arduino.h>
 #include <stdio.h>
 #include "xc.h"
 #include <p24FJ128GA010.h> // for microcontroller
