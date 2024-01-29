@@ -1,0 +1,22 @@
+Circuit: * D:\Haashim Shahzada\Documents\github\automated-tourniquet\schematic_design\AT01\Sims\LT1935_TA01.asc
+
+Direct Newton iteration for .op point succeeded.
+
+Date: Sat Jan 27 12:34:36 2024
+Total elapsed time: 12.059 seconds.
+
+tnom = 27
+temp = 27
+method = modified trap
+totiter = 2176370
+traniter = 2176333
+tranpoints = 661301
+accept = 465857
+rejected = 195444
+matrix size = 20
+fillins = 2
+solver = Normal
+Avg thread counts: 1.0/1.0/1.0/1.0
+Matrix Compiler1: 720 bytes object code size  0.7/0.4/[0.4]
+Matrix Compiler2: 1.21 KB object code size  0.5/0.6/[0.2]
+

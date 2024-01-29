@@ -1,0 +1,22 @@
+* D:\Haashim Shahzada\Documents\github\automated-tourniquet\schematic_design\AT01\Sims\Draft1.asc
+V2 N001 0 0
+M1 N001 N002 N003 N003 AO6407
+D1 N002 N003 1N5817
+R1 N002 0 100k tol=1 pwr=0.1
+C1 N003 0 10µ V=20 Irms=290m Rser=1 Lser=0 mfg="Vishay" pn="593D106M020B" type="Tantalum"
+C2 N004 0 100µ V=6.3 Irms=0 Rser=0 Lser=0 mfg="Murata" pn="GRM31CR60J107KE39" type="X5R"
+C3 N004 0 1µ V=4 Irms=0 Rser=0 Lser=0 mfg="Murata" pn="GRM032R60G105ME05" type="X5R"
+XU1 N003 MP_01 N003 NC_02 0 N003 N005 0 N004 N004 NC_03 LT3041
+R2 N005 0 33.2K tol=1 pwr=0.1
+C4 N005 0 0.47µ V=4 Irms=3.38 Rser=0.0190129 Lser=0 mfg="KEMET" pn="C0805C474K7PAC" type="X5R"
+C5 N004 0 10µ V=16 Irms=0 Rser=0 Lser=0 mfg="Murata" pn="GRM21BR61C106ME15" type="X5R"
+V1 N002 0 5
+.model D D
+.lib C:\Users\Haashim Shahzada\AppData\Local\LTspice\lib\cmp\standard.dio
+.model NMOS NMOS
+.model PMOS PMOS
+.lib C:\Users\Haashim Shahzada\AppData\Local\LTspice\lib\cmp\standard.mos
+.tran 0 10 0 0.1
+.lib LT3041.sub
+.backanno
+.end
