@@ -32,15 +32,20 @@
 #define SOLENOID_PIN  27
 #define MOTOR_PIN  15
 #define LED_PIN 13
+#define UP_BUTTON 34
+#define DOWN_BUTTON 39
 Adafruit_MPRLS mpr = Adafruit_MPRLS(RESET_PIN, EOC_PIN);
 TFT_eSPI tft = TFT_eSPI();
 
-float calibrationValue;
+int venipuncture_pressure = 75;
+float calibration_value;
 
 void setup() {
   pinMode(MOTOR_PIN, OUTPUT);
   pinMode(SOLENOID_PIN, OUTPUT);
   pinMode(LED_PIN, OUTPUT);
+  pinMode(UP_BUTTON, INPUT);
+  pinMode(DOWN_BUTTON, INPUT);
   digitalWrite(SOLENOID_PIN, HIGH);
   digitalWrite(MOTOR_PIN, LOW);
   Serial.begin(115200);
@@ -53,7 +58,7 @@ void setup() {
     }
   }
   Serial.println("Found MPRLS sensor");
-  calibrationValue = mpr.readPressure();
+  calibration_value = mpr.readPressure();
 
   // LCD
   tft.init();
@@ -61,18 +66,28 @@ void setup() {
 }
 
 void loop() {
-  float pressure_mmHg = (mpr.readPressure()-calibrationValue)*0.75;
-  Serial.print("Pressure (mmHg): "); Serial.println(pressure_mmHg);
+  float pressure_mmHg = (mpr.readPressure()-calibration_value)*0.75;
+  Serial.println(pressure_mmHg);
   Serial.print("Pressure (PSI): "); Serial.println(pressure_mmHg / 68.947572932);
-  if (pressure_mmHg >= 100){
+  if (pressure_mmHg >= venipuncture_pressure){
     digitalWrite(MOTOR_PIN, LOW);
-    digitalWrite(SOLENOID_PIN, LOW);
-    digitalWrite(LED_PIN, HIGH);
-  } else {
+    digitalWrite(SOLENOID_PIN, HIGH);
+    // digitalWrite(LED_PIN, HIGH);
+  }
+  else {
     digitalWrite(MOTOR_PIN, HIGH);
     digitalWrite(SOLENOID_PIN, HIGH);
-    digitalWrite(LED_PIN, LOW);
+    // digitalWrite(LED_PIN, LOW);
+  }
+  bool button_1 = digitalRead(UP_BUTTON);
+  bool button_2 = digitalRead(DOWN_BUTTON);
+  if (button_1 == HIGH){
+    venipuncture_pressure = venipuncture_pressure - 1;
+  }
+  else if (button_2 == HIGH){
+    venipuncture_pressure = venipuncture_pressure + 1;
   }
   tft.drawString(String(pressure_mmHg), 50, 100, 6);
-  delay(1000);
+  tft.drawString(String(venipuncture_pressure), 50, 150, 6);
+  // delay(1000);
 }
