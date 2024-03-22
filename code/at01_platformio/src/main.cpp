@@ -52,7 +52,6 @@ void setup() {
 void loop() {
   float pressure_mmHg = (mpr.readPressure()-calibration_value)*0.75;
   Serial.println(pressure_mmHg);
-  Serial.print("Pressure (PSI): "); Serial.println(pressure_mmHg / 68.947572932);
   if (pressure_mmHg >= venipuncture_pressure){
     digitalWrite(MOTOR_PIN, LOW);
     digitalWrite(SOLENOID_PIN, HIGH);
