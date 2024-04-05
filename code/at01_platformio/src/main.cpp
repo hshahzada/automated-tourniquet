@@ -15,6 +15,7 @@
 #define UP_BUTTON 42
 #define DOWN_BUTTON 41
 #define SLEEP_PIN 35
+#define BL_PIN 9
 
 Adafruit_MPRLS mpr = Adafruit_MPRLS(RESET_PIN, EOC_PIN);
 TFT_eSPI tft = TFT_eSPI();
@@ -27,9 +28,9 @@ int interruptCounter;
 float calibration_value;
 
 // PID Setup
-double Setpoint = 20;
+double Setpoint = 25;
 double Input, Output;
-double Kp = 2, Ki = 0.05, Kd = 1; // Example PID tuning values, adjust as needed
+double Kp = 3, Ki = 0.05, Kd = 1; // Example PID tuning values, adjust as needed
 PID myPID(&Input, &Output, &Setpoint, Kp, Ki, Kd, DIRECT);
 
 void IRAM_ATTR onTime() {
@@ -42,6 +43,7 @@ void setup() {
   pinMode(MOTOR_PIN, OUTPUT);
   pinMode(SOLENOID_PIN, OUTPUT);
   pinMode(LED_PIN, OUTPUT);
+  pinMode(BL_PIN, OUTPUT);
   pinMode(UP_BUTTON, INPUT);
   pinMode(DOWN_BUTTON, INPUT);
   digitalWrite(SOLENOID_PIN, LOW);
@@ -77,13 +79,14 @@ void setup() {
   tft.init();
   tft.fillScreen(0x00);
   digitalWrite(SLEEP_PIN, HIGH);
+  digitalWrite(BL_PIN, HIGH);
 }
 
 void loop() {
   float pressure_mmHg = (mpr.readPressure()-calibration_value)*0.75;
   Serial.println(pressure_mmHg);
 
-  if (pressure_mmHg >= Setpoint+20){
+  if (pressure_mmHg >= Setpoint+3){
     digitalWrite(SOLENOID_PIN, HIGH);
     // digitalWrite(LED_PIN, HIGH);
   }
