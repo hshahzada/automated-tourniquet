@@ -33,7 +33,8 @@ bool updateDisplay = true;         // flag for updating display
 #define EOC_PIN    -1  // set to any GPIO pin to read end-of-conversion by pin
 #define SOLENOID_PIN  37
 #define MOTOR_PIN  39
-#define LED_PIN 13
+#define LED1_PIN 44
+#define LED2_PIN 43
 #define UP_BUTTON 42
 #define DOWN_BUTTON 41
 #define SLEEP_PIN 35
@@ -68,11 +69,11 @@ int interruptCounter;
 float calibration_value;
 
 // PID Setup
-double maxPressure = 25;
+double PIDPressure;
 double Input, Output;
 // Input = currentPressure;
 double Kp = 3, Ki = 0.05, Kd = 1; // Example PID tuning values, adjust as needed
-PID myPID(&Input, &Output, &maxPressure, Kp, Ki, Kd, DIRECT);
+PID myPID(&Input, &Output, &PIDPressure, Kp, Ki, Kd, DIRECT);
 
 void IRAM_ATTR onTime() {
     portENTER_CRITICAL_ISR(&timerMux);
@@ -83,12 +84,15 @@ void IRAM_ATTR onTime() {
 void setup() {
   pinMode(MOTOR_PIN, OUTPUT);
   pinMode(SOLENOID_PIN, OUTPUT);
-  pinMode(LED_PIN, OUTPUT);
   pinMode(BL_PIN, OUTPUT);
   pinMode(UP_BUTTON, INPUT);
   pinMode(DOWN_BUTTON, INPUT);
+  pinMode(LED1_PIN, OUTPUT);
+  pinMode(LED2_PIN, OUTPUT);
   digitalWrite(SOLENOID_PIN, LOW);
   digitalWrite(MOTOR_PIN, LOW);
+  digitalWrite(LED1_PIN, HIGH);
+  digitalWrite(LED2_PIN, HIGH);
   pinMode(SLEEP_PIN, OUTPUT);
   Serial.begin(115200);
   Wire.begin(1,2);
@@ -105,7 +109,7 @@ void setup() {
   if (! mpr.begin()) {
     Serial.println("Failed to communicate with MPRLS sensor, check wiring?");
     while (1) {
-        digitalWrite(LED_PIN, HIGH);
+        digitalWrite(LED2_PIN, HIGH);
         delay(10);
     }
   }
@@ -124,7 +128,6 @@ void setup() {
 }
 
 void loop() {
-  startTime = millis();  //initial start time
   // Serial.println(currentPage);
   switch (currentPage) {
     case homePage: homePageDetails(); break;
@@ -137,39 +140,6 @@ void loop() {
   if (applyPressureActive) {
     applyPressure(targetPressure, targetTime, mode);
   }
-
-  // float pressure_mmHg = (mpr.readPressure()-calibration_value)*0.75;
-  // Serial.println(pressure_mmHg);
-
-  // if (pressure_mmHg >= Setpoint+3){
-  //   digitalWrite(SOLENOID_PIN, HIGH);
-  //   // digitalWrite(LED_PIN, HIGH);
-  // }
-  // else {
-  //   digitalWrite(SOLENOID_PIN, LOW);
-  //   // digitalWrite(LED_PIN, LOW);
-  // }
-  // bool button_1 = digitalRead(UP_BUTTON);
-  // bool button_2 = digitalRead(DOWN_BUTTON);
-  // if (button_1 == HIGH){
-  //   Setpoint = Setpoint - 1;
-  // }
-  // else if (button_2 == HIGH){
-  //   Setpoint = Setpoint + 1;
-  // }
-  
-  // Input = pressure_mmHg;
-  // myPID.Compute();
-  // analogWrite(MOTOR_PIN, Output);
-
-  // tft.drawString(String(Setpoint), 50, 150, 6);
-  // if (interruptCounter > 0) {
-  //   portENTER_CRITICAL(&timerMux);
-  //   interruptCounter--;
-  //   portEXIT_CRITICAL(&timerMux);
-  //   tft.drawString(String(pressure_mmHg), 50, 100, 6);
-  //   Serial.println("Interrupt Triggered");
-    // }
 }
 
 // ========================================================================
@@ -364,8 +334,8 @@ void bicepOcclusionDetails(void) {
     delay(5000);  // show target details for 5 seconds
 
     // setting pressure and time
-    targetPressure = VENEPUNCTURE_PRESSURE;
-    targetTime = VENEPUNCTURE_TIME;
+    targetPressure = BICEP_PRESSURE;
+    targetTime = BICEP_TIME;
     // Copy the string to mode
     strcpy(mode, "OCCLUSION, BICEP");
 
@@ -394,8 +364,8 @@ void thighOcclusionDetails(void) {
     delay(5000);  // show target details for 5 seconds
 
     // setting pressure and time
-    targetPressure = VENEPUNCTURE_PRESSURE;
-    targetTime = VENEPUNCTURE_TIME;
+    targetPressure = THIGH_PRESSURE;
+    targetTime = THIGH_TIME;
     // Copy the string to mode
     strcpy(mode, "OCCLUSION, THIGH");
 
@@ -411,15 +381,19 @@ void thighOcclusionDetails(void) {
 // ||                        APPLY PRESSURE                              ||
 // ========================================================================
 void applyPressure(int maxPressure, int maxTime, char* modeDetails) {
+  
   // Concatenate the modeDetails string with "Mode: "
   char modeMessage[60];  // Declare a character array to hold the concatenated message
   strcpy(modeMessage, "Mode: ");
   strcat(modeMessage, modeDetails);
   updateDisplay = true;
+  startTime = millis();
   while (true) {
+    currentPressure = (mpr.readPressure() - calibration_value) * 0.75;
+    PIDPressure = maxPressure;
+    Serial.println(currentPressure);
     if (updateDisplay) {
-      // clear display
-      tft.fillScreen(TFT_BLACK);
+      tft.fillScreen(0x00);
       // display mode as title
       tft.drawString("{ -------------------------------- }", 10, 10, 2);
       tft.drawString(modeMessage, 10, 30, 2);
@@ -435,7 +409,6 @@ void applyPressure(int maxPressure, int maxTime, char* modeDetails) {
       tft.drawString("Target Time [sec]:", 10, 250, 2);
       tft.drawString(String(maxTime / 1000), 10, 270, 2);
       tft.drawString("{ -------------------------------- }", 10, 290, 2);
-
       updateDisplay = false;  // Reset update flag
     }
 
@@ -453,25 +426,45 @@ void applyPressure(int maxPressure, int maxTime, char* modeDetails) {
     myPID.Compute();
     analogWrite(MOTOR_PIN, Output);
 
-    if (interruptCounter > 0) {
-      portENTER_CRITICAL(&timerMux);
-      interruptCounter--;
-      portEXIT_CRITICAL(&timerMux);
-      float currentTime = millis();
-      currentPressure = (mpr.readPressure() - calibration_value) * 0.75;
-      char pressureString[10];                         // Assuming the maximum length of the string won't exceed 10 characters
-      dtostrf(currentPressure, 6, 2, pressureString);  // Convert to string with 6 characters including 2 decimal points
-      tft.drawString(pressureString, 10, 90, 2);       // Display the pressure string
-      tft.drawString(String(currentTime / 1000 - 8, 2), 10, 210, 2);
-      Serial.println("Interrupt Triggered");
+    onInterrupt();
+
+    bool timerOn = false;
+    if (currentPressure >= maxPressure-5){
+      startTime = millis();
+      timerOn = true;
+      while(millis()-startTime < maxTime){
+        float timerCount = millis()-startTime;
+        tft.drawString(String(timerCount / 1000, 2), 10, 210, 2);
+      }
     }
 
-    if (currentPressure >= maxPressure + 3) {
-      digitalWrite(SOLENOID_PIN, HIGH);
-      // digitalWrite(LED_PIN, HIGH);
-    } else {
-      digitalWrite(SOLENOID_PIN, LOW);
-      // digitalWrite(LED_PIN, LOW);
+    if (timerOn){
+      tft.fillScreen(0xFB00);
+      tft.drawString("{ -------------------------------- }", 10, 10, 2);
+      tft.drawString(modeMessage, 10, 30, 2);
+      // display pressure information
+      tft.drawString("{ -------------------------------- }", 10, 50, 2);
+      tft.drawString("Current Pressure [mmHg]:", 10, 70, 2);
+      tft.drawString("{ -------------------------------- }", 10, 110, 2);
+      tft.drawString("Target Pressure [mmHg]:", 10, 130, 2);
+      tft.drawString(String(maxPressure), 10, 150, 2);
+      tft.drawString("{ -------------------------------- }", 10, 170, 2);
+      tft.drawString("Current Time [sec]:", 10, 190, 2);
+      tft.drawString("{ -------------------------------- }", 10, 230, 2);
+      tft.drawString("Target Time [sec]:", 10, 250, 2);
+      tft.drawString(String(maxTime / 1000), 10, 270, 2);
+      tft.drawString("{ -------------------------------- }", 10, 290, 2);
     }
+  }
+}
+
+void onInterrupt(){
+  if (interruptCounter > 0) {
+    portENTER_CRITICAL(&timerMux);
+    interruptCounter--;
+    portEXIT_CRITICAL(&timerMux);
+    char pressureString[10];                         // Assuming the maximum length of the string won't exceed 10 characters
+    dtostrf(currentPressure, 6, 2, pressureString);  // Convert to string with 6 characters including 2 decimal points
+    tft.drawString(pressureString, 10, 90, 2);       // Display the pressure string
   }
 }
