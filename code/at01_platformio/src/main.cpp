@@ -33,8 +33,8 @@ bool updateDisplay = true;         // flag for updating display
 #define EOC_PIN    -1  // set to any GPIO pin to read end-of-conversion by pin
 #define SOLENOID_PIN  37
 #define MOTOR_PIN  39
-#define LED1_PIN 44
-#define LED2_PIN 43
+#define LED1_PIN -1
+#define LED2_PIN -1
 #define UP_BUTTON 42
 #define DOWN_BUTTON 41
 #define SLEEP_PIN 35
@@ -298,7 +298,7 @@ void occlusionDetails(void) {
     }
 
     // move pointer down
-    if (DOWN_BUTTON_WAS_PRESSED && buttonNotPressed(DOWN_BUTTON)) {
+    if (UP_BUTTON_WAS_PRESSED && buttonNotPressed(UP_BUTTON)) {
       currentPage = bicepOcclusion;
       Serial.println("Current Selection: BICEP OCCLUSION");
       updateDisplay = true;             // set display flag
@@ -307,7 +307,7 @@ void occlusionDetails(void) {
     }
 
     // move pointer up
-    if (UP_BUTTON_WAS_PRESSED && buttonNotPressed(UP_BUTTON)) {
+    if (DOWN_BUTTON_WAS_PRESSED && buttonNotPressed(DOWN_BUTTON)) {
       currentPage = thighOcclusion;
       Serial.println("Current Selection: THIGH OCCLUSION");
       updateDisplay = true;           // set display flag
