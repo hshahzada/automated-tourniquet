@@ -1,470 +1,279 @@
-#include "Arduino.h"
-#include <Wire.h>
-#include <Adafruit_I2CDevice.h>
-#include "Adafruit_MPRLS.h"
-#include <SPI.h>
-#include  <TFT_eSPI.h> // Loads the library itself
-#include <PID_v1.h>
+#include <lvgl.h>
+#include <TFT_eSPI.h>
+//#include <examples/lv_examples.h>
+//#include <demos/lv_demos.h>
 
-// setup enum with all menu page options
-enum pageType { homePage,
-                venepuncture,
-                occlusion,
-                bicepOcclusion,
-                thighOcclusion };
-enum pageType currentPage = homePage;  // default is home
-#define homePageCount 2
+/*Set to your screen resolution and rotation*/
+#define TFT_HOR_RES   240
+#define TFT_VER_RES   320
+#define TFT_ROTATION  LV_DISPLAY_ROTATION_0
 
-// Function prototypes
-void homePageDetails(void);                                              // function for menu
-void venepunctureDetails(void);                                          // function for menu
-void bicepOcclusionDetails(void);                                        // function for menu
-void thighOcclusionDetails(void);                                        // function for menu
-void applyPressure(int maxPressure, int maxTime, char modeDetails[60]);  // apply pressure function
-bool buttonPressed(int button);                                          // helper function for menu
-bool buttonNotPressed(int button);                                       // helper function for menu
+/*LVGL draw into this buffer, 1/10 screen size usually works well. The size is in bytes*/
+#define DRAW_BUF_SIZE (TFT_HOR_RES * TFT_VER_RES / 10 * (LV_COLOR_DEPTH / 8))
+uint32_t draw_buf[DRAW_BUF_SIZE / 4];
 
-// flags
-bool applyPressureActive = false;  // flag for pressure
-bool updateDisplay = true;         // flag for updating display
-
-// You dont *need* a reset and EOC pin for most uses, so we set to -1 and don't connect
-#define RESET_PIN  -1  // set to any GPIO pin # to hard-reset on begin()
-#define EOC_PIN    -1  // set to any GPIO pin to read end-of-conversion by pin
+#define UP_BUTTON 42
+#define DOWN_BUTTON 41
 #define SOLENOID_PIN  37
 #define MOTOR_PIN  39
 #define LED1_PIN -1
 #define LED2_PIN -1
-#define UP_BUTTON 42
-#define DOWN_BUTTON 41
 #define SLEEP_PIN 35
 #define BL_PIN 9
 
-// Pressure and Time Variables
-const float VENEPUNCTURE_PRESSURE = 60;
-const float BICEP_PRESSURE = 203;
-const float THIGH_PRESSURE = 300;
-float startPressure = 0;
-float currentPressure = 0;
-float targetPressure = 0;
+void venepunctureScreen();
+void occlusionScreen();
+void bicepOcclusionScreen();
+void thighOcclusionScreen();
 
-const unsigned long VENEPUNCTURE_TIME = 60000;
-const unsigned long BICEP_TIME = 5400000;
-const unsigned long THIGH_TIME = 7200000;
-unsigned long startTime = 0;
-unsigned long currentTime = 0;
-unsigned long targetTime = 0;
+#if LV_USE_LOG != 0
+void my_print( lv_log_level_t level, const char * buf )
+{
+  LV_UNUSED(level);
+  Serial.println(buf);
+  Serial.flush();
+}
+#endif
 
-// modes
-char mode[60];
-
-Adafruit_MPRLS mpr = Adafruit_MPRLS(RESET_PIN, EOC_PIN);
-TFT_eSPI tft = TFT_eSPI();
-
-hw_timer_t * timer = NULL;
-portMUX_TYPE timerMux = portMUX_INITIALIZER_UNLOCKED;
-
-//int venipuncture_pressure = 20; //should be 75
-int interruptCounter;
-float calibration_value;
-
-// PID Setup
-double PIDPressure;
-double Input, Output;
-// Input = currentPressure;
-double Kp = 3, Ki = 0.05, Kd = 1; // Example PID tuning values, adjust as needed
-PID myPID(&Input, &Output, &PIDPressure, Kp, Ki, Kd, DIRECT);
-
-void IRAM_ATTR onTime() {
-    portENTER_CRITICAL_ISR(&timerMux);
-    interruptCounter++;
-    portEXIT_CRITICAL_ISR(&timerMux);
+/* LVGL calls it when a rendered image needs to copied to the display*/
+void my_disp_flush( lv_display_t *disp, const lv_area_t *area, uint8_t * px_map)
+{
+  /*Call it to tell LVGL you are ready*/
+  lv_display_flush_ready(disp);
 }
 
-void setup() {
-  pinMode(MOTOR_PIN, OUTPUT);
-  pinMode(SOLENOID_PIN, OUTPUT);
-  pinMode(BL_PIN, OUTPUT);
-  pinMode(UP_BUTTON, INPUT);
-  pinMode(DOWN_BUTTON, INPUT);
-  pinMode(LED1_PIN, OUTPUT);
-  pinMode(LED2_PIN, OUTPUT);
-  digitalWrite(SOLENOID_PIN, LOW);
-  digitalWrite(MOTOR_PIN, LOW);
-  digitalWrite(LED1_PIN, HIGH);
-  digitalWrite(LED2_PIN, HIGH);
-  pinMode(SLEEP_PIN, OUTPUT);
-  Serial.begin(115200);
-  Wire.begin(1,2);
-
-  // Configure Prescaler to 80, as our timer runs @ 80Mhz
-  // Giving an output of 80,000,000 / 80 = 1,000,000 ticks / second
-  timer = timerBegin(0, 80, true);
-  timerAttachInterrupt(timer, &onTime, true);
-  // Fire Interrupt every 30m ticks, so 30s
-  timerAlarmWrite(timer, 1000000, true);
-  timerAlarmEnable(timer);
-
-  Serial.println("MPRLS Simple Test");
-  if (! mpr.begin()) {
-    Serial.println("Failed to communicate with MPRLS sensor, check wiring?");
-    while (1) {
-        digitalWrite(LED2_PIN, HIGH);
-        delay(10);
-    }
-  }
-  Serial.println("Found MPRLS sensor");
-  calibration_value = mpr.readPressure();
-  
-  // Initialize PID controller
-  myPID.SetMode(AUTOMATIC);
-  myPID.SetOutputLimits(0, 255); // PWM range for motor control
-
-  // LCD
-  tft.init();
-  tft.fillScreen(0x00);
-  digitalWrite(SLEEP_PIN, HIGH);
-  digitalWrite(BL_PIN, HIGH);
+/*use Arduinos millis() as tick source*/
+static uint32_t my_tick(void)
+{
+  return millis();
 }
 
-void loop() {
-  // Serial.println(currentPage);
-  switch (currentPage) {
-    case homePage: homePageDetails(); break;
-    case venepuncture: venepunctureDetails(); break;
-    case occlusion: occlusionDetails(); break;
-    case bicepOcclusion: bicepOcclusionDetails(); break;
-    case thighOcclusion: thighOcclusionDetails(); break;
-  }
+static void up_pressed(lv_event_t * event)
+{
+  //Original Code
+  lv_event_code_t code = lv_event_get_code(event);
 
-  if (applyPressureActive) {
-    applyPressure(targetPressure, targetTime, mode);
+  if(code == LV_EVENT_PRESSED) 
+  {
+    venepunctureScreen();
   }
 }
 
-// ========================================================================
-// ||                            HOME PAGE                               ||
-// ========================================================================
-void homePageDetails(void) {
+static void down_pressed(lv_event_t * event)
+{
+  //Original Code
+  lv_event_code_t code = lv_event_get_code(event);
 
-  // flag for updating display
-  updateDisplay = true;
-
-  // track when entering beginning of loop
-  uint32_t loopStartMS;
-
-  // track button states
-  bool UP_BUTTON_WAS_PRESSED = false;
-  bool DOWN_BUTTON_WAS_PRESSED = false;
-
-  // inner loop
-  while (true) {
-
-    // capture start time
-    loopStartMS = millis();
-
-    if (updateDisplay) {
-
-      // clear update flag
-      updateDisplay = false;
-
-      // clear display
-      tft.fillScreen(TFT_BLACK);
-
-      // create main menu display
-      tft.drawString("[ MAIN MENU ]", 10, 20, 4);
-      tft.drawString("{ -------------------------------- }", 10, 50, 2);
-      tft.drawString("Option 1: Venepuncture [UP]", 10, 70, 2);
-      tft.drawString("Option 2: Limb Occlusion [DOWN]", 10, 90, 2);
-      tft.drawString("{ -------------------------------- }", 10, 110, 2);
-    }
-
-    // capture the button down states
-    if (buttonPressed(UP_BUTTON)) {
-      UP_BUTTON_WAS_PRESSED = true;  // set up button flag
-    }
-    if (buttonPressed(DOWN_BUTTON)) {
-      DOWN_BUTTON_WAS_PRESSED = true;  // set down button flag
-    }
-
-    // move pointer down
-    if (DOWN_BUTTON_WAS_PRESSED && buttonNotPressed(DOWN_BUTTON)) {
-      currentPage = occlusion;
-      Serial.println("Current Selection: OCCLUSION");
-      updateDisplay = true;             // set display flag
-      DOWN_BUTTON_WAS_PRESSED = false;  // clear down button flag
-      return;
-    }
-
-    // move pointer up
-    if (UP_BUTTON_WAS_PRESSED && buttonNotPressed(UP_BUTTON)) {
-      currentPage = venepuncture;
-      Serial.println("Current Selection: VENEPUNCTURE");
-      updateDisplay = true;           // set display flag
-      UP_BUTTON_WAS_PRESSED = false;  // clear up button flag
-      return;
-    }
+  if(code == LV_EVENT_PRESSED) 
+  {
+    Serial.println("Down pressed");
   }
 }
 
-
-// ========================================================================
-// ||                            TOOLS - BUTTON PRESSED                  ||
-// ========================================================================
 bool buttonPressed(int button) {
   return digitalRead(button) == HIGH && digitalRead(button) == HIGH;
 }
 
-
-// ========================================================================
-// ||                        TOOLS - BUTTON NOT PRESSED                  ||
-// ========================================================================
 bool buttonNotPressed(int button) {
   return digitalRead(button) == LOW && digitalRead(button) == LOW;
 }
 
-
-// ========================================================================
-// ||                            VENEPUNCTURE PAGE                       ||
-// ========================================================================
-void venepunctureDetails(void) {
-  while (true) {
-    // clear display
-    tft.fillScreen(TFT_BLACK);
-
-    // page display
-    tft.drawString("[VENEPUNCTURE SELECTED]", 10, 20, 2);
-    tft.drawString("{ -------------------------------- }", 10, 50, 2);
-    tft.drawString("Target pressure = 60 mmHg,", 10, 70, 2);
-    tft.drawString("applied for 60 seconds.", 10, 90, 2);
-    tft.drawString("{ -------------------------------- }", 10, 110, 2);
-    delay(5000);  // show target details for 5 seconds
-
-    // setting pressure, time and mode
-    targetPressure = VENEPUNCTURE_PRESSURE;
-    targetTime = VENEPUNCTURE_TIME;
-    // Copy the string to mode
-    strcpy(mode, "VENEPUNCTURE, ARM");
-
-    // start device
-    applyPressureActive = true;
-
-    applyPressure(targetPressure, targetTime, mode);
+int my_btn_read(){
+  if(buttonPressed(UP_BUTTON) && buttonNotPressed(DOWN_BUTTON)){
+    return 0;
+  }
+  if(buttonPressed(DOWN_BUTTON) && buttonNotPressed(UP_BUTTON)){
+    return 1;
+  } else {
+    return -1;
   }
 }
 
-// ========================================================================
-// ||                             OCCLUSION PAGE                         ||
-// ========================================================================
-void occlusionDetails(void) {
-  // flag for updating display
-  updateDisplay = true;
-
-  // track when entering beginning of loop
-  uint32_t loopStartMS;
-
-  // track button states
-  bool UP_BUTTON_WAS_PRESSED = false;
-  bool DOWN_BUTTON_WAS_PRESSED = false;
-
-  // inner loop
-  while (true) {
-
-    // capture start time
-    loopStartMS = millis();
-
-    if (updateDisplay) {
-
-      // clear update flag
-      updateDisplay = false;
-
-      // clear display
-      tft.fillScreen(TFT_BLACK);
-
-      // page display
-      tft.drawString("[OCCLUSION SELECTED]", 10, 20, 2);
-      tft.drawString("{ -------------------------------- }", 10, 50, 2);
-      tft.drawString("Option 1: Bicep [UP]", 10, 70, 2);
-      tft.drawString("Option 2: Thigh [DOWN]", 10, 90, 2);
-      tft.drawString("{ -------------------------------- }", 10, 110, 2);
-    }
-
-    // capture the button down states
-    if (buttonPressed(UP_BUTTON)) {
-      UP_BUTTON_WAS_PRESSED = true;  // set up button flag
-    }
-    if (buttonPressed(DOWN_BUTTON)) {
-      DOWN_BUTTON_WAS_PRESSED = true;  // set down button flag
-    }
-
-    // move pointer down
-    if (UP_BUTTON_WAS_PRESSED && buttonNotPressed(UP_BUTTON)) {
-      currentPage = bicepOcclusion;
-      Serial.println("Current Selection: BICEP OCCLUSION");
-      updateDisplay = true;             // set display flag
-      DOWN_BUTTON_WAS_PRESSED = false;  // clear down button flag
-      return;
-    }
-
-    // move pointer up
-    if (DOWN_BUTTON_WAS_PRESSED && buttonNotPressed(DOWN_BUTTON)) {
-      currentPage = thighOcclusion;
-      Serial.println("Current Selection: THIGH OCCLUSION");
-      updateDisplay = true;           // set display flag
-      UP_BUTTON_WAS_PRESSED = false;  // clear up button flag
-      return;
-    }
+void button_read( lv_indev_t * indev, lv_indev_data_t * data ){
+  static uint32_t last_btn = 0;   /*Store the last pressed button*/
+  int btn_pr = my_btn_read();     /*Get the ID (0,1,2...) of the pressed button*/
+  if(btn_pr >= 0) {               /*Is there a button press? (E.g. -1 indicated no button was pressed)*/
+      last_btn = btn_pr;           /*Save the ID of the pressed button*/
+      data->state = LV_INDEV_STATE_PRESSED;  /*Set the pressed state*/
+  } else {
+      data->state = LV_INDEV_STATE_RELEASED; /*Set the released state*/
   }
+
+  data->btn_id = last_btn;         /*Save the last button*/
 }
 
-// ========================================================================
-// ||                            BICEP OCCLUSION PAGE                    ||
-// ========================================================================
-void bicepOcclusionDetails(void) {
-  while (true) {
-    // clear display
-    tft.fillScreen(TFT_BLACK);
+void homeScreen(){
+  lv_obj_t *screen = lv_obj_create(lv_screen_active());
+  lv_obj_set_size(screen, TFT_HOR_RES, TFT_VER_RES);
+  lv_obj_center(screen);
+  lv_obj_clear_flag(screen, LV_OBJ_FLAG_SCROLLABLE);
 
-    // page display
-    tft.drawString("[BICEP OCCLUSION SELECTED]", 10, 20, 2);
-    tft.drawString("{ -------------------------------- }", 10, 50, 2);
-    tft.drawString("Target pressure = 203 mmHg,", 10, 70, 2);
-    tft.drawString("applied for 1.5 hours.", 10, 90, 2);
-    tft.drawString("{ -------------------------------- }", 10, 110, 2);
-    delay(5000);  // show target details for 5 seconds
+  LV_IMAGE_DECLARE(arrow_up);
+  lv_obj_t * up = lv_imagebutton_create(screen);
+  lv_imagebutton_set_src(up, LV_IMAGEBUTTON_STATE_RELEASED, NULL, &arrow_up, NULL);
+  lv_obj_align(up, LV_ALIGN_CENTER, -50, -30);
+  lv_obj_add_event_cb(up, up_pressed, LV_EVENT_ALL, NULL);
 
-    // setting pressure and time
-    targetPressure = BICEP_PRESSURE;
-    targetTime = BICEP_TIME;
-    // Copy the string to mode
-    strcpy(mode, "OCCLUSION, BICEP");
+  LV_IMAGE_DECLARE(arrow_down);
+  lv_obj_t * down = lv_imagebutton_create(screen);
+  lv_imagebutton_set_src(down, LV_IMAGEBUTTON_STATE_RELEASED, NULL, &arrow_down, NULL);
+  lv_obj_align(down, LV_ALIGN_BOTTOM_MID, -50, -20);
+  lv_obj_add_event_cb(down, down_pressed, LV_EVENT_ALL, NULL);
 
-    // start device
-    applyPressureActive = true;
+  lv_obj_t *menu_label = lv_label_create( screen );
+  lv_label_set_text( menu_label, "Main Menu" );
+  lv_obj_align( menu_label, LV_ALIGN_TOP_MID, -3, 0);
 
-    // Continue the loop to update pressure display
-    applyPressure(targetPressure, targetTime, mode);
-  }
-}
+  static lv_style_t menu_style;
+  lv_style_init(&menu_style);
+  lv_style_set_text_font(&menu_style, &lv_font_montserrat_24); // <--- you have to enable other font sizes in menuconfig
+  lv_obj_add_style(menu_label, &menu_style, 0);  // <--- obj is the label
 
-// ========================================================================
-// ||                            THIGH OCCLUSION PAGE                    ||
-// ========================================================================
-void thighOcclusionDetails(void) {
-  while (true) {
-    // clear display
-    tft.fillScreen(TFT_BLACK);
+  lv_obj_t *choose_label = lv_label_create( screen );
+  lv_label_set_text( choose_label, "Please choose a");
+  lv_obj_align( choose_label, LV_ALIGN_TOP_MID, -3, 30);
+  lv_label_set_long_mode(choose_label, LV_LABEL_LONG_WRAP);
 
-    // page display
-    tft.drawString("[THIGH OCCLUSION SELECTED]", 10, 20, 2);
-    tft.drawString("{ -------------------------------- }", 10, 50, 2);
-    tft.drawString("Target pressure = 300 mmHg,", 10, 70, 2);
-    tft.drawString("applied for 2 hours.", 10, 90, 2);
-    tft.drawString("{ -------------------------------- }", 10, 110, 2);
-    delay(5000);  // show target details for 5 seconds
+  lv_obj_t *device_label = lv_label_create( screen );
+  lv_label_set_text( device_label, "device mode");
+  lv_obj_align( device_label, LV_ALIGN_TOP_MID, -3, 45);
+  lv_label_set_long_mode(device_label, LV_LABEL_LONG_WRAP);
 
-    // setting pressure and time
-    targetPressure = THIGH_PRESSURE;
-    targetTime = THIGH_TIME;
-    // Copy the string to mode
-    strcpy(mode, "OCCLUSION, THIGH");
+  static lv_style_t choose_style;
+  lv_style_init(&choose_style);
+  lv_style_set_text_font(&choose_style, &lv_font_montserrat_16); // <--- you have to enable other font sizes in menuconfig
+  lv_obj_add_style(choose_label, &choose_style, 0);  // <--- obj is the label
+  lv_obj_add_style(device_label, &choose_style, 0);  // <--- obj is the label
 
-    // start device
-    applyPressureActive = true;
+  lv_obj_t *vene_label = lv_label_create( screen );
+  lv_label_set_text( vene_label, "Venepuncture" );
+  lv_obj_align( vene_label, LV_ALIGN_CENTER, 50, -35);
 
-    // Continue the loop to update pressure display
-    applyPressure(targetPressure, targetTime, mode);
-  }
-}
-
-// ========================================================================
-// ||                        APPLY PRESSURE                              ||
-// ========================================================================
-void applyPressure(int maxPressure, int maxTime, char* modeDetails) {
+  lv_obj_t *occlusion_label = lv_label_create( screen );
+  lv_label_set_text( occlusion_label, "Occlusion" );
+  lv_obj_align( occlusion_label, LV_ALIGN_BOTTOM_MID, 40, -70);
   
-  // Concatenate the modeDetails string with "Mode: "
-  char modeMessage[60];  // Declare a character array to hold the concatenated message
-  strcpy(modeMessage, "Mode: ");
-  strcat(modeMessage, modeDetails);
-  updateDisplay = true;
-  startTime = millis();
-  while (true) {
-    currentPressure = (mpr.readPressure() - calibration_value) * 0.75;
-    PIDPressure = maxPressure;
-    Serial.println(currentPressure);
-    if (updateDisplay) {
-      tft.fillScreen(0x00);
-      // display mode as title
-      tft.drawString("{ -------------------------------- }", 10, 10, 2);
-      tft.drawString(modeMessage, 10, 30, 2);
-      // display pressure information
-      tft.drawString("{ -------------------------------- }", 10, 50, 2);
-      tft.drawString("Current Pressure [mmHg]:", 10, 70, 2);
-      tft.drawString("{ -------------------------------- }", 10, 110, 2);
-      tft.drawString("Target Pressure [mmHg]:", 10, 130, 2);
-      tft.drawString(String(maxPressure), 10, 150, 2);
-      tft.drawString("{ -------------------------------- }", 10, 170, 2);
-      tft.drawString("Current Time [sec]:", 10, 190, 2);
-      tft.drawString("{ -------------------------------- }", 10, 230, 2);
-      tft.drawString("Target Time [sec]:", 10, 250, 2);
-      tft.drawString(String(maxTime / 1000), 10, 270, 2);
-      tft.drawString("{ -------------------------------- }", 10, 290, 2);
-      updateDisplay = false;  // Reset update flag
-    }
+  lv_obj_t *select_label = lv_label_create( screen );
+  lv_label_set_text( select_label, "Select with up/down arrows" );
+  lv_obj_align( select_label, LV_ALIGN_BOTTOM_MID, 0, 3);
 
-    bool buttonUp = digitalRead(UP_BUTTON);
-    bool buttonDown = digitalRead(DOWN_BUTTON);
-    if (buttonUp == HIGH) {
-      maxPressure = maxPressure + 1;
-      updateDisplay = true;
-    } else if (buttonDown == HIGH) {
-      maxPressure = maxPressure - 1;
-      updateDisplay = true;
-    }
+  lv_obj_t *battery_label = lv_label_create( screen );
+  lv_label_set_text( battery_label, "73% " LV_SYMBOL_BATTERY_3);
+  lv_obj_align( battery_label, LV_ALIGN_TOP_RIGHT, 3, 0);
 
-    Input = currentPressure;
-    myPID.Compute();
-    analogWrite(MOTOR_PIN, Output);
+  lv_obj_t *time_label = lv_label_create( screen );
+  lv_label_set_text( time_label, "13:26");
+  lv_obj_align( time_label, LV_ALIGN_TOP_LEFT, 0, 0);
 
-    onInterrupt();
+  static lv_style_t vene_style;
+  lv_style_init(&vene_style);
+  lv_style_set_text_font(&vene_style, &lv_font_montserrat_14); // <--- you have to enable other font sizes in menuconfig
+  lv_obj_add_style(vene_label, &vene_style, 0);  // <--- obj is the label
+  lv_obj_add_style(occlusion_label, &vene_style, 0);
+  lv_obj_add_style(select_label, &vene_style, 0);
 
-    bool timerOn = false;
-    if (currentPressure >= maxPressure-5){
-      startTime = millis();
-      timerOn = true;
-      while(millis()-startTime < maxTime){
-        float timerCount = millis()-startTime;
-        tft.drawString(String(timerCount / 1000, 2), 10, 210, 2);
-      }
-    }
-
-    if (timerOn){
-      tft.fillScreen(0xFB00);
-      tft.drawString("{ -------------------------------- }", 10, 10, 2);
-      tft.drawString(modeMessage, 10, 30, 2);
-      // display pressure information
-      tft.drawString("{ -------------------------------- }", 10, 50, 2);
-      tft.drawString("Current Pressure [mmHg]:", 10, 70, 2);
-      tft.drawString("{ -------------------------------- }", 10, 110, 2);
-      tft.drawString("Target Pressure [mmHg]:", 10, 130, 2);
-      tft.drawString(String(maxPressure), 10, 150, 2);
-      tft.drawString("{ -------------------------------- }", 10, 170, 2);
-      tft.drawString("Current Time [sec]:", 10, 190, 2);
-      tft.drawString("{ -------------------------------- }", 10, 230, 2);
-      tft.drawString("Target Time [sec]:", 10, 250, 2);
-      tft.drawString(String(maxTime / 1000), 10, 270, 2);
-      tft.drawString("{ -------------------------------- }", 10, 290, 2);
-    }
-  }
+  static lv_style_t time_style;
+  lv_style_init(&time_style);
+  lv_style_set_text_font(&time_style, &lv_font_montserrat_12); // <--- you have to enable other font sizes in menuconfig
+  lv_obj_add_style(battery_label, &time_style, 0);  // <--- obj is the label
+  lv_obj_add_style(time_label, &time_style, 0);
 }
 
-void onInterrupt(){
-  if (interruptCounter > 0) {
-    portENTER_CRITICAL(&timerMux);
-    interruptCounter--;
-    portEXIT_CRITICAL(&timerMux);
-    char pressureString[10];                         // Assuming the maximum length of the string won't exceed 10 characters
-    dtostrf(currentPressure, 6, 2, pressureString);  // Convert to string with 6 characters including 2 decimal points
-    tft.drawString(pressureString, 10, 90, 2);       // Display the pressure string
-  }
+void venepunctureScreen(){
+  lv_obj_t *screen = lv_obj_create(lv_screen_active());
+  lv_obj_set_size(screen, TFT_HOR_RES, TFT_VER_RES);
+  lv_obj_center(screen);
+  lv_obj_clear_flag(screen, LV_OBJ_FLAG_SCROLLABLE);
+
+  lv_obj_t *menu_label = lv_label_create( screen );
+  lv_label_set_text( menu_label, "Venepuncture" );
+  lv_obj_align( menu_label, LV_ALIGN_TOP_MID, 0, 0);
+
+  static lv_style_t menu_style;
+  lv_style_init(&menu_style);
+  lv_style_set_text_font(&menu_style, &lv_font_montserrat_24); // <--- you have to enable other font sizes in menuconfig
+  lv_obj_add_style(menu_label, &menu_style, 0);  // <--- obj is the label
+
+  lv_obj_t *vene_label = lv_label_create( screen );
+  lv_label_set_text( vene_label, "Target Pressure: 60 mmHg" );
+  lv_obj_align( vene_label, LV_ALIGN_CENTER, 0, 100);
+
+  LV_IMAGE_DECLARE(img_hand);
+
+  lv_obj_t * needle_line;
+  lv_obj_t * needle_img;
+  
+  lv_obj_t * scale_img = lv_scale_create(lv_screen_active());
+
+  lv_obj_set_size(scale_img, 150, 150);
+  lv_scale_set_mode(scale_img, LV_SCALE_MODE_ROUND_INNER);
+  lv_obj_set_style_bg_opa(scale_img, LV_OPA_COVER, 0);
+  lv_obj_set_style_bg_color(scale_img, lv_palette_lighten(LV_PALETTE_RED, 5), 0);
+  lv_obj_set_style_radius(scale_img, LV_RADIUS_CIRCLE, 0);
+  lv_obj_set_style_clip_corner(scale_img, true, 0);
+  lv_obj_align(scale_img, LV_ALIGN_CENTER, 0, 0);
+
+  lv_scale_set_label_show(scale_img, true);
+
+  lv_scale_set_total_tick_count(scale_img, 31);
+  lv_scale_set_major_tick_every(scale_img, 5);
+
+  lv_obj_set_style_length(scale_img, 5, LV_PART_ITEMS);
+  lv_obj_set_style_length(scale_img, 10, LV_PART_INDICATOR);
+  lv_scale_set_range(scale_img, 0, 60);
+
+  lv_scale_set_angle_range(scale_img, 270);
+  lv_scale_set_rotation(scale_img, 135);
+
+  /* image must point to the right. E.g. -O------>*/
+  needle_img = lv_img_create(scale_img);
+  lv_image_set_src(needle_img, &img_hand);
+  lv_obj_align(needle_img, LV_ALIGN_CENTER, 47, -2);
+  lv_image_set_pivot(needle_img, 3, 4);
+
+  static lv_style_t vene_style;
+  lv_style_init(&vene_style);
+  lv_style_set_text_font(&vene_style, &lv_font_montserrat_14); // <--- you have to enable other font sizes in menuconfig
+  lv_obj_add_style(vene_label, &vene_style, 0);  // <--- obj is the label
+  // lv_obj_add_style(occlusion_label, &vene_style, 0);
+}
+
+void setup()
+{
+  String LVGL_Arduino = "Hello Arduino! ";
+  LVGL_Arduino += String('V') + lv_version_major() + "." + lv_version_minor() + "." + lv_version_patch();
+
+  pinMode(BL_PIN, OUTPUT);
+  digitalWrite(BL_PIN, HIGH);
+  pinMode(UP_BUTTON, INPUT);
+  pinMode(DOWN_BUTTON, INPUT);
+
+  Serial.begin( 115200 );
+  Serial.println( LVGL_Arduino );
+
+  lv_init();
+
+  /*Set a tick source so that LVGL will know how much time elapsed. */
+  lv_tick_set_cb(my_tick);
+
+  lv_display_t * disp;
+  /*TFT_eSPI can be enabled lv_conf.h to initialize the display in a simple way*/
+  disp = lv_tft_espi_create(TFT_HOR_RES, TFT_VER_RES, draw_buf, sizeof(draw_buf));
+  lv_display_set_rotation(disp, TFT_ROTATION);
+
+  lv_indev_t * button_indev = lv_indev_create();
+  lv_indev_set_type(button_indev, LV_INDEV_TYPE_BUTTON);
+  lv_indev_set_read_cb(button_indev, button_read);
+  static lv_point_t button_array[2] = { { 70, 130 }, {70, 280} };
+  lv_indev_set_button_points(button_indev, button_array);
+
+  homeScreen();
+
+  Serial.println( "Setup done" );
+}
+
+void loop()
+{
+  lv_timer_handler(); /* let the GUI do its work */
+  delay(5); /* let this time pass */
 }
