@@ -26,6 +26,9 @@ void occlusionScreen();
 void bicepOcclusionScreen();
 void thighOcclusionScreen();
 
+LV_IMAGE_DECLARE(arrow_up);
+LV_IMAGE_DECLARE(arrow_down);
+
 #if LV_USE_LOG != 0
 void my_print( lv_log_level_t level, const char * buf )
 {
@@ -48,6 +51,28 @@ static uint32_t my_tick(void)
   return millis();
 }
 
+static void occlusion_up_pressed(lv_event_t * event)
+{
+  //Original Code
+  lv_event_code_t code = lv_event_get_code(event);
+
+  if(code == LV_EVENT_PRESSED) 
+  {
+    Serial.println("Occlusion Up");
+  }
+}
+
+static void occlusion_down_pressed(lv_event_t * event)
+{
+  //Original Code
+  lv_event_code_t code = lv_event_get_code(event);
+
+  if(code == LV_EVENT_PRESSED) 
+  {
+    Serial.println("Occlusion Down");
+  }
+}
+
 static void up_pressed(lv_event_t * event)
 {
   //Original Code
@@ -66,7 +91,7 @@ static void down_pressed(lv_event_t * event)
 
   if(code == LV_EVENT_PRESSED) 
   {
-    Serial.println("Down pressed");
+    occlusionScreen();
   }
 }
 
@@ -102,19 +127,92 @@ void button_read( lv_indev_t * indev, lv_indev_data_t * data ){
   data->btn_id = last_btn;         /*Save the last button*/
 }
 
+void occlusionScreen(){
+  lv_obj_t *screen = lv_obj_create(lv_screen_active());
+  lv_obj_set_size(screen, TFT_HOR_RES, TFT_VER_RES);
+  lv_obj_center(screen);
+  lv_obj_clear_flag(screen, LV_OBJ_FLAG_SCROLLABLE);
+
+  lv_obj_t * up = lv_imagebutton_create(screen);
+  lv_imagebutton_set_src(up, LV_IMAGEBUTTON_STATE_RELEASED, NULL, &arrow_up, NULL);
+  lv_obj_align(up, LV_ALIGN_CENTER, -50, -30);
+  lv_obj_add_event_cb(up, occlusion_up_pressed, LV_EVENT_ALL, NULL);
+
+  lv_obj_t * down = lv_imagebutton_create(screen);
+  lv_imagebutton_set_src(down, LV_IMAGEBUTTON_STATE_RELEASED, NULL, &arrow_down, NULL);
+  lv_obj_align(down, LV_ALIGN_BOTTOM_MID, -50, -20);
+  lv_obj_add_event_cb(down, occlusion_down_pressed, LV_EVENT_ALL, NULL);
+
+  lv_obj_t *menu_label = lv_label_create( screen );
+  lv_label_set_text( menu_label, "Occlusion" );
+  lv_obj_align( menu_label, LV_ALIGN_TOP_MID, -3, 0);
+
+  static lv_style_t menu_style;
+  lv_style_init(&menu_style);
+  lv_style_set_text_font(&menu_style, &lv_font_montserrat_20); // <--- you have to enable other font sizes in menuconfig
+  lv_obj_add_style(menu_label, &menu_style, 0);  // <--- obj is the label
+
+  lv_obj_t *choose_label = lv_label_create( screen );
+  lv_label_set_text( choose_label, "Please choose an");
+  lv_obj_align( choose_label, LV_ALIGN_TOP_MID, -3, 30);
+  lv_label_set_long_mode(choose_label, LV_LABEL_LONG_WRAP);
+
+  lv_obj_t *device_label = lv_label_create( screen );
+  lv_label_set_text( device_label, "occlusion mode");
+  lv_obj_align( device_label, LV_ALIGN_TOP_MID, -3, 45);
+  lv_label_set_long_mode(device_label, LV_LABEL_LONG_WRAP);
+
+  static lv_style_t choose_style;
+  lv_style_init(&choose_style);
+  lv_style_set_text_font(&choose_style, &lv_font_montserrat_16); // <--- you have to enable other font sizes in menuconfig
+  lv_obj_add_style(choose_label, &choose_style, 0);  // <--- obj is the label
+  lv_obj_add_style(device_label, &choose_style, 0);  // <--- obj is the label
+
+  lv_obj_t *vene_label = lv_label_create( screen );
+  lv_label_set_text( vene_label, "Bicep Occlusion" );
+  lv_obj_align( vene_label, LV_ALIGN_CENTER, 50, -35);
+
+  lv_obj_t *occlusion_label = lv_label_create( screen );
+  lv_label_set_text( occlusion_label, "Thigh Occlusion" );
+  lv_obj_align( occlusion_label, LV_ALIGN_BOTTOM_MID, 50, -55);
+  
+  lv_obj_t *select_label = lv_label_create( screen );
+  lv_label_set_text( select_label, "Select with up/down arrows" );
+  lv_obj_align( select_label, LV_ALIGN_BOTTOM_MID, 0, 3);
+
+  lv_obj_t *battery_label = lv_label_create( screen );
+  lv_label_set_text( battery_label, "73% " LV_SYMBOL_BATTERY_3);
+  lv_obj_align( battery_label, LV_ALIGN_TOP_RIGHT, 3, 0);
+
+  lv_obj_t *time_label = lv_label_create( screen );
+  lv_label_set_text( time_label, "13:26");
+  lv_obj_align( time_label, LV_ALIGN_TOP_LEFT, 0, 0);
+
+  static lv_style_t vene_style;
+  lv_style_init(&vene_style);
+  lv_style_set_text_font(&vene_style, &lv_font_montserrat_14); // <--- you have to enable other font sizes in menuconfig
+  lv_obj_add_style(vene_label, &vene_style, 0);  // <--- obj is the label
+  lv_obj_add_style(occlusion_label, &vene_style, 0);
+  lv_obj_add_style(select_label, &vene_style, 0);
+
+  static lv_style_t time_style;
+  lv_style_init(&time_style);
+  lv_style_set_text_font(&time_style, &lv_font_montserrat_12); // <--- you have to enable other font sizes in menuconfig
+  lv_obj_add_style(battery_label, &time_style, 0);  // <--- obj is the label
+  lv_obj_add_style(time_label, &time_style, 0);
+}
+
 void homeScreen(){
   lv_obj_t *screen = lv_obj_create(lv_screen_active());
   lv_obj_set_size(screen, TFT_HOR_RES, TFT_VER_RES);
   lv_obj_center(screen);
   lv_obj_clear_flag(screen, LV_OBJ_FLAG_SCROLLABLE);
 
-  LV_IMAGE_DECLARE(arrow_up);
   lv_obj_t * up = lv_imagebutton_create(screen);
   lv_imagebutton_set_src(up, LV_IMAGEBUTTON_STATE_RELEASED, NULL, &arrow_up, NULL);
   lv_obj_align(up, LV_ALIGN_CENTER, -50, -30);
   lv_obj_add_event_cb(up, up_pressed, LV_EVENT_ALL, NULL);
 
-  LV_IMAGE_DECLARE(arrow_down);
   lv_obj_t * down = lv_imagebutton_create(screen);
   lv_imagebutton_set_src(down, LV_IMAGEBUTTON_STATE_RELEASED, NULL, &arrow_down, NULL);
   lv_obj_align(down, LV_ALIGN_BOTTOM_MID, -50, -20);
