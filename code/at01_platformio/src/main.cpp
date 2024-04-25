@@ -1,5 +1,9 @@
 #include <lvgl.h>
 #include <TFT_eSPI.h>
+#include <Wire.h>
+#include <Adafruit_I2CDevice.h>
+#include "Adafruit_MPRLS.h"
+#include <PID_v1.h>
 //#include <examples/lv_examples.h>
 //#include <demos/lv_demos.h>
 
@@ -12,6 +16,12 @@
 #define DRAW_BUF_SIZE (TFT_HOR_RES * TFT_VER_RES / 10 * (LV_COLOR_DEPTH / 8))
 uint32_t draw_buf[DRAW_BUF_SIZE / 4];
 
+static uint32_t lvgl_refresh_timestamp = 0u;
+#define LVGL_REFRESH_TIME 5u
+
+// You dont *need* a reset and EOC pin for most uses, so we set to -1 and don't connect
+#define RESET_PIN  -1  // set to any GPIO pin # to hard-reset on begin()
+#define EOC_PIN    -1  // set to any GPIO pin to read end-of-conversion by pin
 #define UP_BUTTON 42
 #define DOWN_BUTTON 41
 #define SOLENOID_PIN  37
@@ -21,6 +31,29 @@ uint32_t draw_buf[DRAW_BUF_SIZE / 4];
 #define SLEEP_PIN 35
 #define BL_PIN 9
 
+const float VENEPUNCTURE_PRESSURE = 60;
+const float BICEP_PRESSURE = 203;
+const float THIGH_PRESSURE = 300;
+float startPressure = 0;
+float currentPressure = 0;
+float targetPressure = 0;
+
+const unsigned long VENEPUNCTURE_TIME = 60000;
+const unsigned long BICEP_TIME = 5400000;
+const unsigned long THIGH_TIME = 7200000;
+unsigned long startTime = 0;
+unsigned long currentTime = 0;
+unsigned long targetTime = 0;
+
+Adafruit_MPRLS mpr = Adafruit_MPRLS(RESET_PIN, EOC_PIN);
+
+// PID Setup
+double PIDPressure;
+double Input, Output;
+float calibration_value;
+double Kp = 3, Ki = 0.05, Kd = 1; // Example PID tuning values, adjust as needed
+PID myPID(&Input, &Output, &PIDPressure, Kp, Ki, Kd, DIRECT);
+
 void venepunctureScreen();
 void occlusionScreen();
 void bicepOcclusionScreen();
@@ -28,6 +61,9 @@ void thighOcclusionScreen();
 
 LV_IMAGE_DECLARE(arrow_up);
 LV_IMAGE_DECLARE(arrow_down);
+
+lv_obj_t *pressure_val;
+char test2[6];
 
 #if LV_USE_LOG != 0
 void my_print( lv_log_level_t level, const char * buf )
@@ -95,6 +131,15 @@ static void down_pressed(lv_event_t * event)
   }
 }
 
+static void timer_labelupdate(lv_timer_t* timer){
+  sprintf(test2, "%.2f", currentPressure);
+  lv_label_set_text(pressure_val, test2);
+}
+
+static void timer_pressureupdate(lv_timer_t* timer){
+  currentPressure = (mpr.readPressure() - calibration_value) * 0.75;
+}
+
 bool buttonPressed(int button) {
   return digitalRead(button) == HIGH && digitalRead(button) == HIGH;
 }
@@ -125,6 +170,11 @@ void button_read( lv_indev_t * indev, lv_indev_data_t * data ){
   }
 
   data->btn_id = last_btn;         /*Save the last button*/
+}
+
+static void set_angle(void * obj, int32_t v)
+{
+  lv_arc_set_value((lv_obj_t*) obj, currentPressure);
 }
 
 void occlusionScreen(){
@@ -278,6 +328,9 @@ void homeScreen(){
 }
 
 void venepunctureScreen(){
+  lv_timer_t * pressure_timer = lv_timer_create(timer_pressureupdate, 50, NULL);
+  lv_timer_ready(pressure_timer);
+
   lv_obj_t *screen = lv_obj_create(lv_screen_active());
   lv_obj_set_size(screen, TFT_HOR_RES, TFT_VER_RES);
   lv_obj_center(screen);
@@ -296,44 +349,29 @@ void venepunctureScreen(){
   lv_label_set_text( vene_label, "Target Pressure: 60 mmHg" );
   lv_obj_align( vene_label, LV_ALIGN_CENTER, 0, 100);
 
-  LV_IMAGE_DECLARE(img_hand);
+  lv_obj_t * arc = lv_arc_create(screen);
+  lv_arc_set_rotation(arc, 270);
+  lv_arc_set_bg_angles(arc, 0, 360);
+  lv_arc_set_range(arc, 0, 60);
+  lv_obj_remove_style(arc, NULL, LV_PART_KNOB);   /*Be sure the knob is not displayed*/
+  lv_obj_remove_flag(arc, LV_OBJ_FLAG_CLICKABLE);  /*To not allow adjusting by click*/
+  lv_obj_align(arc, LV_ALIGN_CENTER, 0, -20);
 
-  lv_obj_t * needle_line;
-  lv_obj_t * needle_img;
-  
-  lv_obj_t * scale_img = lv_scale_create(lv_screen_active());
+  lv_anim_t a;
+  lv_anim_init(&a);
+  lv_anim_set_var(&a, arc);
+  lv_anim_set_exec_cb(&a, set_angle);
+  lv_anim_set_duration(&a, 1000);
+  lv_anim_set_repeat_count(&a, LV_ANIM_REPEAT_INFINITE);    /*Just for the demo*/
+  lv_anim_set_repeat_delay(&a, 500);
+  lv_anim_start(&a);
 
-  lv_obj_set_size(scale_img, 150, 150);
-  lv_scale_set_mode(scale_img, LV_SCALE_MODE_ROUND_INNER);
-  lv_obj_set_style_bg_opa(scale_img, LV_OPA_COVER, 0);
-  lv_obj_set_style_bg_color(scale_img, lv_palette_lighten(LV_PALETTE_RED, 5), 0);
-  lv_obj_set_style_radius(scale_img, LV_RADIUS_CIRCLE, 0);
-  lv_obj_set_style_clip_corner(scale_img, true, 0);
-  lv_obj_align(scale_img, LV_ALIGN_CENTER, 0, 0);
+  pressure_val = lv_label_create( screen );
+  lv_label_set_text( pressure_val, "");
+  lv_obj_align( pressure_val, LV_ALIGN_CENTER, 0, -20);
 
-  lv_scale_set_label_show(scale_img, true);
-
-  lv_scale_set_total_tick_count(scale_img, 31);
-  lv_scale_set_major_tick_every(scale_img, 5);
-
-  lv_obj_set_style_length(scale_img, 5, LV_PART_ITEMS);
-  lv_obj_set_style_length(scale_img, 10, LV_PART_INDICATOR);
-  lv_scale_set_range(scale_img, 0, 60);
-
-  lv_scale_set_angle_range(scale_img, 270);
-  lv_scale_set_rotation(scale_img, 135);
-
-  /* image must point to the right. E.g. -O------>*/
-  needle_img = lv_img_create(scale_img);
-  lv_image_set_src(needle_img, &img_hand);
-  lv_obj_align(needle_img, LV_ALIGN_CENTER, 47, -2);
-  lv_image_set_pivot(needle_img, 3, 4);
-
-  static lv_style_t vene_style;
-  lv_style_init(&vene_style);
-  lv_style_set_text_font(&vene_style, &lv_font_montserrat_14); // <--- you have to enable other font sizes in menuconfig
-  lv_obj_add_style(vene_label, &vene_style, 0);  // <--- obj is the label
-  // lv_obj_add_style(occlusion_label, &vene_style, 0);
+  lv_timer_t * label_timer = lv_timer_create(timer_labelupdate, 1000, NULL);
+  lv_timer_ready(label_timer);
 }
 
 void setup()
@@ -341,13 +379,35 @@ void setup()
   String LVGL_Arduino = "Hello Arduino! ";
   LVGL_Arduino += String('V') + lv_version_major() + "." + lv_version_minor() + "." + lv_version_patch();
 
+  pinMode(MOTOR_PIN, OUTPUT);
+  pinMode(SOLENOID_PIN, OUTPUT);
   pinMode(BL_PIN, OUTPUT);
-  digitalWrite(BL_PIN, HIGH);
   pinMode(UP_BUTTON, INPUT);
   pinMode(DOWN_BUTTON, INPUT);
+  pinMode(SLEEP_PIN, OUTPUT);
 
-  Serial.begin( 115200 );
-  Serial.println( LVGL_Arduino );
+  digitalWrite(SOLENOID_PIN, LOW);
+  digitalWrite(MOTOR_PIN, LOW);
+  digitalWrite(BL_PIN, HIGH);
+  digitalWrite(SLEEP_PIN, HIGH);
+
+  Serial.begin(115200);
+  Wire.begin(1,2);
+  Serial.println(LVGL_Arduino);
+
+  if (! mpr.begin()) {
+    Serial.println("Failed to communicate with MPRLS sensor, check wiring?");
+    while (1) {
+        // digitalWrite(LED2_PIN, HIGH);
+        delay(10);
+    }
+  }
+
+  calibration_value = mpr.readPressure();
+
+  // Initialize PID controller
+  myPID.SetMode(AUTOMATIC);
+  myPID.SetOutputLimits(0, 255); // PWM range for motor control
 
   lv_init();
 
@@ -365,13 +425,26 @@ void setup()
   static lv_point_t button_array[2] = { { 70, 130 }, {70, 280} };
   lv_indev_set_button_points(button_indev, button_array);
 
-  homeScreen();
-
   Serial.println( "Setup done" );
+
+  lvgl_refresh_timestamp = millis();
+
+  homeScreen();
+}
+
+static void LVGL_TaskMng( void )
+{
+  uint32_t now = millis();
+  // LVGL Refresh Timed Task
+  if( (now - lvgl_refresh_timestamp) >= LVGL_REFRESH_TIME )
+  {
+    lvgl_refresh_timestamp = now;
+    // let the GUI does work
+    lv_timer_handler();
+  }
 }
 
 void loop()
 {
-  lv_timer_handler(); /* let the GUI do its work */
-  delay(5); /* let this time pass */
+  LVGL_TaskMng(); /* let the GUI do its work */
 }
