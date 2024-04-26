@@ -65,7 +65,12 @@ LV_IMAGE_DECLARE(arrow_down);
 lv_obj_t *pressure_val;
 lv_obj_t *vene_label;
 lv_obj_t * bar;
+lv_timer_t * bar_timer;
+int bar_value;
 char test2[6];
+bool timerOn = false;
+int pressureTime;
+bool timeStarted = false;
 
 #if LV_USE_LOG != 0
 void my_print( lv_log_level_t level, const char * buf )
@@ -97,6 +102,7 @@ static void occlusion_up_pressed(lv_event_t * event)
   if(code == LV_EVENT_PRESSED) 
   {
     targetPressure = BICEP_PRESSURE;
+    bar_value = (int)BICEP_TIME/1000;
     targetTime = BICEP_TIME;
     actuationScreen("Bicep Occlusion");
   }
@@ -110,6 +116,7 @@ static void occlusion_down_pressed(lv_event_t * event)
   if(code == LV_EVENT_PRESSED) 
   {
     targetPressure = THIGH_PRESSURE;
+    bar_value = (int)THIGH_TIME/1000;
     targetTime = THIGH_TIME;
     actuationScreen("Thigh Occlusion");
   }
@@ -123,6 +130,7 @@ static void up_pressed(lv_event_t * event)
   if(code == LV_EVENT_PRESSED) 
   {
     targetPressure = VENEPUNCTURE_PRESSURE;
+    bar_value = (int)VENEPUNCTURE_TIME/1000;
     targetTime = VENEPUNCTURE_TIME;
     actuationScreen("Venepuncture");
   }
@@ -144,9 +152,12 @@ static void timer_labelupdate(lv_timer_t* timer){
   lv_label_set_text(pressure_val, test2);
 }
 
+static void timer_barupdate(lv_timer_t* timer){
+  bar_value--;
+}
+
 static void timer_pressureupdate(lv_timer_t* timer){
   currentPressure = (mpr.readPressure() - calibration_value) * 0.75;
-  Serial.println(currentPressure);
 
   PIDPressure = targetPressure;
   bool buttonUp = digitalRead(UP_BUTTON);
@@ -166,24 +177,38 @@ static void timer_pressureupdate(lv_timer_t* timer){
 
   Input = currentPressure;
   myPID.Compute();
-  analogWrite(MOTOR_PIN, Output);
-  // bool timerOn = false;
-  // if (currentPressure >= 1){
-  //   startTime = millis();
-  //   timerOn = true;
-  //   int bar_value = 100;
-  //   bar = lv_bar_create(lv_screen_active());
-  //   lv_obj_set_size(bar, 200, 20);
-  //   lv_obj_center(bar);
-  //   lv_bar_set_value(bar, 0, LV_ANIM_OFF);
-  //   while(millis()-startTime < targetTime){
-  //     float timerCount = millis()-startTime;
-  //     if (millis()-startTime % 1000 == 0){
-  //       bar_value--;
-  //     }
-  //     lv_bar_set_value(bar, bar_value, LV_ANIM_OFF);
-  //   }
-  // }
+  
+  if (timerOn == false) {
+    analogWrite(MOTOR_PIN, Output);
+  }
+  
+  if (currentPressure >= targetPressure-3 && timeStarted == false){
+    startTime = millis();
+    timeStarted = true;
+  } else if (currentPressure < targetPressure-3){
+    startTime = 0;
+    timeStarted = false;
+  }
+  
+  if (millis()-startTime > 5000 && timeStarted == true){
+    lv_timer_resume(bar_timer);
+    pressureTime = millis();
+    analogWrite(MOTOR_PIN, 0);
+    timerOn = true;
+  }
+
+  if (millis()-pressureTime >= targetTime && timerOn){
+    lv_timer_pause(bar_timer);
+    timerOn = false;
+  }
+
+  if (currentPressure > targetPressure+10){
+    digitalWrite(SOLENOID_PIN, HIGH);
+  } else {
+    digitalWrite(SOLENOID_PIN, LOW);
+  }
+  
+  Serial.println(timerOn);
 }
 
 bool buttonPressed(int button) {
@@ -223,10 +248,10 @@ static void set_arc_angle(void * obj, int32_t v)
   lv_arc_set_value((lv_obj_t*) obj, currentPressure);
 }
 
-// static void set_bar_value(void * bar, int32_t v)
-// {
-//     lv_bar_set_value((lv_obj_t*) bar, v, LV_ANIM_OFF);
-// }
+static void set_bar_value(void * bar, int32_t v)
+{
+  lv_bar_set_value((lv_obj_t*) bar, bar_value, LV_ANIM_OFF);
+}
 
 void occlusionScreen(){
   lv_obj_t *screen = lv_obj_create(lv_screen_active());
@@ -398,7 +423,7 @@ void actuationScreen(const char *mode){
 
   vene_label = lv_label_create( screen );
   lv_label_set_text( vene_label, "");
-  lv_obj_align( vene_label, LV_ALIGN_CENTER, 0, 100);
+  lv_obj_align( vene_label, LV_ALIGN_CENTER, 0, 120);
 
   lv_obj_t * arc = lv_arc_create(screen);
   lv_arc_set_rotation(arc, 270);
@@ -426,20 +451,28 @@ void actuationScreen(const char *mode){
   lv_style_set_text_font(&pressure_label_style, &lv_font_montserrat_24); // <--- you have to enable other font sizes in menuconfig
   lv_obj_add_style(pressure_val, &pressure_label_style, 0);  // <--- obj is the label
 
+  bar = lv_bar_create(lv_screen_active()); 
+  lv_obj_set_size(bar, 200, 20);
+  lv_obj_align(bar, LV_ALIGN_BOTTOM_MID, 0, -70);
+  lv_bar_set_value(bar, 100, LV_ANIM_OFF);
+  lv_bar_set_range(bar, 0, bar_value);
   // lv_obj_add_event_cb(bar, event_cb, LV_EVENT_DRAW_MAIN_END, NULL);
 
-  // lv_anim_t a;
-  // lv_anim_init(&a);
-  // lv_anim_set_var(&a, bar);
-  // lv_anim_set_values(&a, 0, 100);
-  // lv_anim_set_exec_cb(&a, set_bar_value);
-  // lv_anim_set_duration(&a, 4000);
-  // lv_anim_set_playback_duration(&a, 4000);
-  // lv_anim_set_repeat_count(&a, LV_ANIM_REPEAT_INFINITE);
-  // lv_anim_start(&a);
+  lv_anim_t bar_anim;
+  lv_anim_init(&bar_anim);
+  lv_anim_set_var(&bar_anim, bar);
+  lv_anim_set_values(&bar_anim, 0, bar_value);
+  lv_anim_set_exec_cb(&bar_anim, set_bar_value);
+  lv_anim_set_duration(&bar_anim, 4000);
+  lv_anim_set_playback_duration(&bar_anim, 4000);
+  lv_anim_set_repeat_count(&bar_anim, LV_ANIM_REPEAT_INFINITE);
+  lv_anim_start(&bar_anim);
 
   lv_timer_t * label_timer = lv_timer_create(timer_labelupdate, 500, NULL);
   lv_timer_ready(label_timer);
+
+  bar_timer = lv_timer_create(timer_barupdate, 1000,  NULL);
+  lv_timer_pause(bar_timer);
 }
 
 void setup()
