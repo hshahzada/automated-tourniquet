@@ -30,6 +30,8 @@ static uint32_t lvgl_refresh_timestamp = 0u;
 #define LED2_PIN -1
 #define SLEEP_PIN 35
 #define BL_PIN 9
+#define STATUS_LED 19
+#define POWER_LED 20
 
 const float VENEPUNCTURE_PRESSURE = 60;
 const float BICEP_PRESSURE = 203;
@@ -486,11 +488,14 @@ void setup()
   pinMode(UP_BUTTON, INPUT);
   pinMode(DOWN_BUTTON, INPUT);
   pinMode(SLEEP_PIN, OUTPUT);
+  pinMode(STATUS_LED, OUTPUT);
+  pinMode(POWER_LED, OUTPUT);
 
   digitalWrite(SOLENOID_PIN, LOW);
   digitalWrite(MOTOR_PIN, LOW);
   digitalWrite(BL_PIN, HIGH);
   digitalWrite(SLEEP_PIN, HIGH);
+  digitalWrite(POWER_LED, HIGH);
 
   Serial.begin(115200);
   Wire.begin(1,2);
@@ -499,7 +504,7 @@ void setup()
   if (! mpr.begin()) {
     Serial.println("Failed to communicate with MPRLS sensor, check wiring?");
     while (1) {
-        // digitalWrite(LED2_PIN, HIGH);
+        digitalWrite(STATUS_LED, HIGH);
         delay(10);
     }
   }
