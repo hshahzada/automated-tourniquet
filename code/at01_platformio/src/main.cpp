@@ -4,6 +4,8 @@
 #include <Adafruit_I2CDevice.h>
 #include "Adafruit_MPRLS.h"
 #include <PID_v1.h>
+#include <WiFi.h>
+#include "time.h"
 //#include <examples/lv_examples.h>
 //#include <demos/lv_demos.h>
 
@@ -18,6 +20,13 @@ uint32_t draw_buf[DRAW_BUF_SIZE / 4];
 
 static uint32_t lvgl_refresh_timestamp = 0u;
 #define LVGL_REFRESH_TIME 5u
+
+const char* ssid       = "HaashimPixel";
+const char* password   = "12345678";
+
+const char* ntp_server = "pool.ntp.org";
+const long  gmt_offset_sec = -18000;
+const int   daylight_offset_sec = 3600;
 
 // You dont *need* a reset and EOC pin for most uses, so we set to -1 and don't connect
 #define RESET_PIN  -1  // set to any GPIO pin # to hard-reset on begin()
@@ -36,30 +45,27 @@ static uint32_t lvgl_refresh_timestamp = 0u;
 const float VENEPUNCTURE_PRESSURE = 60;
 const float BICEP_PRESSURE = 203;
 const float THIGH_PRESSURE = 300;
-float startPressure;
-float currentPressure;
-float targetPressure;
+float current_pressure;
+float target_pressure;
 
 const unsigned long VENEPUNCTURE_TIME = 60000;
 const unsigned long BICEP_TIME = 5400000;
 const unsigned long THIGH_TIME = 7200000;
-unsigned long startTime = 0;
-// unsigned long currentTime = 0;
-unsigned long targetTime = 0;
+unsigned long start_time = 0;
+unsigned long target_time = 0;
 
 Adafruit_MPRLS mpr = Adafruit_MPRLS(RESET_PIN, EOC_PIN);
 
 // PID Setup
-double PIDPressure;
+double PID_pressure;
 double Input, Output;
 float calibration_value;
 double Kp = 3, Ki = 0.05, Kd = 1; // Example PID tuning values, adjust as needed
-PID myPID(&Input, &Output, &PIDPressure, Kp, Ki, Kd, DIRECT);
+PID myPID(&Input, &Output, &PID_pressure, Kp, Ki, Kd, DIRECT);
 
-void actuationScreen(const char *mode);
-void occlusionScreen();
-void bicepOcclusionScreen();
-void thighOcclusionScreen();
+void home_screen();
+void actuation_screen(const char *mode);
+void occlusion_screen();
 
 LV_IMAGE_DECLARE(arrow_up);
 LV_IMAGE_DECLARE(arrow_down);
@@ -69,10 +75,11 @@ lv_obj_t *vene_label;
 lv_obj_t * bar;
 lv_timer_t * bar_timer;
 int bar_value;
-char test2[6];
-bool timerOn = false;
-int pressureTime;
-bool timeStarted = false;
+char current_pressure_label[6];
+bool timer_on = false;
+int pressure_time;
+bool time_started = false;
+struct tm timeinfo;
 
 #if LV_USE_LOG != 0
 void my_print( lv_log_level_t level, const char * buf )
@@ -103,10 +110,10 @@ static void occlusion_up_pressed(lv_event_t * event)
 
   if(code == LV_EVENT_PRESSED) 
   {
-    targetPressure = BICEP_PRESSURE;
+    target_pressure = BICEP_PRESSURE;
     bar_value = (int)BICEP_TIME/1000;
-    targetTime = BICEP_TIME;
-    actuationScreen("Bicep Occlusion");
+    target_time = BICEP_TIME;
+    actuation_screen("Bicep Occlusion");
   }
 }
 
@@ -117,10 +124,10 @@ static void occlusion_down_pressed(lv_event_t * event)
 
   if(code == LV_EVENT_PRESSED) 
   {
-    targetPressure = THIGH_PRESSURE;
+    target_pressure = THIGH_PRESSURE;
     bar_value = (int)THIGH_TIME/1000;
-    targetTime = THIGH_TIME;
-    actuationScreen("Thigh Occlusion");
+    target_time = THIGH_TIME;
+    actuation_screen("Thigh Occlusion");
   }
 }
 
@@ -131,10 +138,10 @@ static void up_pressed(lv_event_t * event)
 
   if(code == LV_EVENT_PRESSED) 
   {
-    targetPressure = VENEPUNCTURE_PRESSURE;
+    target_pressure = VENEPUNCTURE_PRESSURE;
     bar_value = (int)VENEPUNCTURE_TIME/1000;
-    targetTime = VENEPUNCTURE_TIME;
-    actuationScreen("Venepuncture");
+    target_time = VENEPUNCTURE_TIME;
+    actuation_screen("Venepuncture");
   }
 }
 
@@ -145,13 +152,13 @@ static void down_pressed(lv_event_t * event)
 
   if(code == LV_EVENT_PRESSED) 
   {
-    occlusionScreen();
+    occlusion_screen();
   }
 }
 
 static void timer_labelupdate(lv_timer_t* timer){
-  sprintf(test2, "%d", (int)currentPressure);
-  lv_label_set_text(pressure_val, test2);
+  sprintf(current_pressure_label, "%d", (int)current_pressure);
+  lv_label_set_text(pressure_val, current_pressure_label);
 }
 
 static void timer_barupdate(lv_timer_t* timer){
@@ -159,73 +166,73 @@ static void timer_barupdate(lv_timer_t* timer){
 }
 
 static void timer_pressureupdate(lv_timer_t* timer){
-  currentPressure = (mpr.readPressure() - calibration_value) * 0.75;
+  current_pressure = (mpr.readPressure() - calibration_value) * 0.75;
 
-  PIDPressure = targetPressure;
-  bool buttonUp = digitalRead(UP_BUTTON);
-  bool buttonDown = digitalRead(DOWN_BUTTON);
-  if (buttonUp == HIGH) {
-    targetPressure = targetPressure + 1;
-  } else if (buttonDown == HIGH) {
-    targetPressure = targetPressure - 1;
+  PID_pressure = target_pressure;
+  bool button_up = digitalRead(UP_BUTTON);
+  bool button_down = digitalRead(DOWN_BUTTON);
+  if (button_up == HIGH) {
+    target_pressure = target_pressure + 1;
+  } else if (button_down == HIGH) {
+    target_pressure = target_pressure - 1;
   }
 
   char pressure_target[21]; 
-  sprintf(pressure_target, "%d", (int)targetPressure);
+  sprintf(pressure_target, "%d", (int)target_pressure);
   String target_pressure_label = (String)"Target Pressure: " + pressure_target + (String)" mmHg";
   char arr[target_pressure_label.length() + 1]; 
 	strcpy(arr, target_pressure_label.c_str());
   lv_label_set_text(vene_label, arr);
 
-  Input = currentPressure;
+  Input = current_pressure;
   myPID.Compute();
   
-  if (timerOn == false) {
+  if (timer_on == false) {
     analogWrite(MOTOR_PIN, Output);
   }
   
-  if (currentPressure >= targetPressure-3 && timeStarted == false){
-    startTime = millis();
-    timeStarted = true;
-  } else if (currentPressure < targetPressure-3){
-    startTime = 0;
-    timeStarted = false;
+  if (current_pressure >= target_pressure-3 && time_started == false){
+    start_time = millis();
+    time_started = true;
+  } else if (current_pressure < target_pressure-3){
+    start_time = 0;
+    time_started = false;
   }
   
-  if (millis()-startTime > 5000 && timeStarted == true){
+  if (millis()-start_time > 5000 && time_started == true){
     lv_timer_resume(bar_timer);
-    pressureTime = millis();
+    pressure_time = millis();
     analogWrite(MOTOR_PIN, 0);
-    timerOn = true;
+    timer_on = true;
   }
 
-  if (millis()-pressureTime >= targetTime && timerOn){
+  if (millis()-pressure_time >= target_time && timer_on){
     lv_timer_pause(bar_timer);
-    timerOn = false;
+    timer_on = false;
   }
 
-  if (currentPressure > targetPressure+10){
+  if (current_pressure > target_pressure+10){
     digitalWrite(SOLENOID_PIN, HIGH);
   } else {
     digitalWrite(SOLENOID_PIN, LOW);
   }
   
-  Serial.println(timerOn);
+  Serial.println(timer_on);
 }
 
-bool buttonPressed(int button) {
+bool button_pressed(int button) {
   return digitalRead(button) == HIGH && digitalRead(button) == HIGH;
 }
 
-bool buttonNotPressed(int button) {
+bool button_not_pressed(int button) {
   return digitalRead(button) == LOW && digitalRead(button) == LOW;
 }
 
 int my_btn_read(){
-  if(buttonPressed(UP_BUTTON) && buttonNotPressed(DOWN_BUTTON)){
+  if(button_pressed(UP_BUTTON) && button_not_pressed(DOWN_BUTTON)){
     return 0;
   }
-  if(buttonPressed(DOWN_BUTTON) && buttonNotPressed(UP_BUTTON)){
+  if(button_pressed(DOWN_BUTTON) && button_not_pressed(UP_BUTTON)){
     return 1;
   } else {
     return -1;
@@ -247,7 +254,7 @@ void button_read( lv_indev_t * indev, lv_indev_data_t * data ){
 
 static void set_arc_angle(void * obj, int32_t v)
 {
-  lv_arc_set_value((lv_obj_t*) obj, currentPressure);
+  lv_arc_set_value((lv_obj_t*) obj, current_pressure);
 }
 
 static void set_bar_value(void * bar, int32_t v)
@@ -255,7 +262,12 @@ static void set_bar_value(void * bar, int32_t v)
   lv_bar_set_value((lv_obj_t*) bar, bar_value, LV_ANIM_OFF);
 }
 
-void occlusionScreen(){
+void occlusion_screen(){
+
+  int battery_level = analogRead(4);
+  char battery_string[21]; 
+  sprintf(battery_string, "%d", battery_level);
+
   lv_obj_t *screen = lv_obj_create(lv_screen_active());
   lv_obj_set_size(screen, TFT_HOR_RES, TFT_VER_RES);
   lv_obj_center(screen);
@@ -309,11 +321,14 @@ void occlusionScreen(){
   lv_obj_align( select_label, LV_ALIGN_BOTTOM_MID, 0, 3);
 
   lv_obj_t *battery_label = lv_label_create( screen );
-  lv_label_set_text( battery_label, "73% " LV_SYMBOL_BATTERY_3);
+  lv_label_set_text( battery_label, battery_string LV_SYMBOL_BATTERY_3);
   lv_obj_align( battery_label, LV_ALIGN_TOP_RIGHT, 3, 0);
 
+  char loc_time[9];
+  sprintf(locTime, "%02d:%02d:%02d", timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
+
   lv_obj_t *time_label = lv_label_create( screen );
-  lv_label_set_text( time_label, "13:26");
+  lv_label_set_text( time_label, loc_time);
   lv_obj_align( time_label, LV_ALIGN_TOP_LEFT, 0, 0);
 
   static lv_style_t vene_style;
@@ -330,7 +345,12 @@ void occlusionScreen(){
   lv_obj_add_style(time_label, &time_style, 0);
 }
 
-void homeScreen(){
+void home_screen(){
+
+  int battery_level = analogRead(4);
+  char battery_string[21]; 
+  sprintf(battery_string, "%d", battery_level);
+
   lv_obj_t *screen = lv_obj_create(lv_screen_active());
   lv_obj_set_size(screen, TFT_HOR_RES, TFT_VER_RES);
   lv_obj_center(screen);
@@ -384,11 +404,14 @@ void homeScreen(){
   lv_obj_align( select_label, LV_ALIGN_BOTTOM_MID, 0, 3);
 
   lv_obj_t *battery_label = lv_label_create( screen );
-  lv_label_set_text( battery_label, "73% " LV_SYMBOL_BATTERY_3);
+  lv_label_set_text( battery_label, battery_string LV_SYMBOL_BATTERY_3);
   lv_obj_align( battery_label, LV_ALIGN_TOP_RIGHT, 3, 0);
 
+  char loc_time[9];
+  sprintf(loc_time, "%02d:%02d:%02d", timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
+
   lv_obj_t *time_label = lv_label_create( screen );
-  lv_label_set_text( time_label, "13:26");
+  lv_label_set_text( time_label, loc_time);
   lv_obj_align( time_label, LV_ALIGN_TOP_LEFT, 0, 0);
 
   static lv_style_t vene_style;
@@ -405,7 +428,7 @@ void homeScreen(){
   lv_obj_add_style(time_label, &time_style, 0);
 }
 
-void actuationScreen(const char *mode){
+void actuation_screen(const char *mode){
   lv_timer_t * pressure_timer = lv_timer_create(timer_pressureupdate, 50, NULL);
   lv_timer_ready(pressure_timer);
 
@@ -430,7 +453,7 @@ void actuationScreen(const char *mode){
   lv_obj_t * arc = lv_arc_create(screen);
   lv_arc_set_rotation(arc, 270);
   lv_arc_set_bg_angles(arc, 0, 360);
-  lv_arc_set_range(arc, 0, targetPressure);
+  lv_arc_set_range(arc, 0, target_pressure);
   lv_obj_remove_style(arc, NULL, LV_PART_KNOB);   /*Be sure the knob is not displayed*/
   lv_obj_remove_flag(arc, LV_OBJ_FLAG_CLICKABLE);  /*To not allow adjusting by click*/
   lv_obj_align(arc, LV_ALIGN_CENTER, 0, -20);
@@ -477,6 +500,15 @@ void actuationScreen(const char *mode){
   lv_timer_pause(bar_timer);
 }
 
+void print_local_time()
+{
+  if(!getLocalTime(&timeinfo)){
+    Serial.println("Failed to obtain time");
+    return;
+  }
+  Serial.println(&timeinfo, "%A, %B %d %Y %H:%M:%S");
+}
+
 void setup()
 {
   String LVGL_Arduino = "Hello Arduino! ";
@@ -509,6 +541,24 @@ void setup()
     }
   }
 
+  // initialize time
+  Serial.printf("Connecting to %s ", ssid);
+  digitalWrite(STATUS_LED, HIGH);
+  WiFi.begin(ssid, password);
+  while (WiFi.status() != WL_CONNECTED) {
+      delay(500);
+      Serial.print(".");
+  }
+  Serial.println(" CONNECTED");
+
+  configTime(gmt_offset_sec, daylight_offset_sec, ntp_server);
+
+  print_local_time();
+  digitalWrite(STATUS_LED, LOW);
+
+  WiFi.disconnect(true);
+  WiFi.mode(WIFI_OFF);
+
   calibration_value = mpr.readPressure();
 
   // Initialize PID controller
@@ -535,7 +585,7 @@ void setup()
 
   lvgl_refresh_timestamp = millis();
 
-  homeScreen();
+  home_screen();
 }
 
 static void LVGL_TaskMng( void )
